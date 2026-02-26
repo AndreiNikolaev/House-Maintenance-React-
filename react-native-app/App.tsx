@@ -32,6 +32,7 @@ import { Equipment, Task, AppSettings } from './src/types';
 import { storage } from './src/services/storage';
 import { maintenanceLogic } from './src/services/maintenance';
 import { yandexApi } from './src/services/yandex';
+import { pdfService } from './src/services/pdf';
 
 const COLORS = {
   bg: '#F5F5F4',
@@ -42,7 +43,9 @@ const COLORS = {
   accent: '#1C1917',
   success: '#059669',
   error: '#EF4444',
-  errorBg: '#FEF2F2'
+  errorBg: '#FEF2F2',
+  stone100: '#F5F5F4',
+  stone50: '#FAFAF9'
 };
 
 export default function App() {
@@ -321,52 +324,210 @@ function TaskCard({ task, onComplete }: { task: Task, onComplete: () => void }) 
 function AddView({ settings, onAdd }: { settings: AppSettings, onAdd: (e: Equipment) => void }) {
   const [model, setModel] = useState('');
   const [location, setLocation] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loadingStep, setLoadingStep] = useState<'idle' | 'searching' | 'extracting' | 'analyzing' | 'merging'>('idle');
+  const [progress, setProgress] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [pdfUri, setPdfUri] = useState<string | null>(null);
+  const [pdfName, setPdfName] = useState<string | null>(null);
+  const [importMode, setImportMode] = useState<'search' | 'pdf' | 'url'>('search');
+  const [url, setUrl] = useState('');
+  const [searchResults, setSearchResults] = useState<{ title: string; url: string }[]>([]);
 
-  const handleImport = async () => {
+  const handleFileSelect = async () => {
+    // In a real Expo app, we would use expo-document-picker
+    setPdfUri('file://manual.pdf');
+    setPdfName('manual_vaillant.pdf');
+    setError(null);
+  };
+
+  const performSearch = async () => {
     if (!model) return;
-    setLoading(true);
+    setLoadingStep('searching');
+    setError(null);
     try {
-      const mockText = `Регламент обслуживания ${model}. 
-      Проверка давления: каждые 6 месяцев. Инструкция: открыть кран, проверить манометр.
-      Чистка фильтра: раз в год. Инструкция: снять крышку, промыть сетку.
-      Правило: всегда отключать питание перед работой.`;
+      const results = await yandexApi.searchV2(model, settings);
+      setSearchResults(results);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoadingStep('idle');
+    }
+  };
 
-      const aiData = await yandexApi.extractData(mockText, settings);
+  const handleImport = async (targetUrl?: string) => {
+    const source = targetUrl || url || (importMode === 'pdf' ? pdfUri : null);
+    if (!source) return;
+
+    setError(null);
+    setProgress(0);
+
+    try {
+      let extracted: { text: string; rules: string[] };
+
+      // 1. Extraction
+      setLoadingStep('extracting');
+      if (importMode === 'url' || targetUrl) {
+        extracted = await pdfService.extractFromUrl(source, (p) => setProgress(p));
+      } else {
+        extracted = await pdfService.extractRelevantText(source, (p) => setProgress(p));
+      }
+
+      // 2. Chunking
+      const chunks = pdfService.chunkText(extracted.text);
+      
+      // 3. Parallel Analysis (Map)
+      setLoadingStep('analyzing');
+      const allTasks: any[] = [];
+      for (let i = 0; i < chunks.length; i++) {
+        setProgress(Math.round(((i + 1) / chunks.length) * 100));
+        const chunkTasks = await yandexApi.processChunk(chunks[i], settings);
+        allTasks.push(...chunkTasks);
+      }
+
+      // 4. Merging (Reduce)
+      setLoadingStep('merging');
+      const finalData = await yandexApi.mergeResults(allTasks, extracted.rules, settings);
+
       const newEquip: Equipment = {
         id: Math.random().toString(36).substr(2, 9),
-        name: aiData.name || model,
-        type: aiData.type || 'Оборудование',
+        name: finalData.name || model || (importMode === 'pdf' ? pdfName?.replace('.pdf', '') : 'Устройство из сети') || 'Новое устройство',
+        type: finalData.type || 'Оборудование',
         location: location || 'Дом',
-        maintenance_schedule: (aiData.maintenance_schedule || []).map((t: any) => ({
+        maintenance_schedule: (finalData.maintenance_schedule || []).map((t: any) => ({
           ...t,
           id: Math.random().toString(36).substr(2, 9),
           lastCompletedDate: null
         })),
-        important_rules: aiData.important_rules || []
+        important_rules: finalData.important_rules || []
       };
+
       onAdd(newEquip);
-    } catch (e) {
-      Alert.alert('Ошибка', 'Не удалось импортировать данные. Проверьте ключи API.');
+    } catch (err: any) {
+      setError(err.message || 'Ошибка обработки. Проверьте API ключи.');
     } finally {
-      setLoading(false);
+      setLoadingStep('idle');
+      setProgress(0);
     }
   };
 
+  const isLoading = loadingStep !== 'idle';
+
   return (
     <View style={styles.addView}>
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>МОДЕЛЬ УСТРОЙСТВА</Text>
-        <View style={styles.inputWrapper}>
-          <Search size={20} color={COLORS.muted} style={styles.inputIcon} />
-          <TextInput 
-            style={styles.input} 
-            placeholder="Напр: Vaillant ecoTEC plus"
-            value={model}
-            onChangeText={setModel}
-          />
-        </View>
+      {/* Mode Switcher */}
+      <View style={styles.modeSwitcher}>
+        {['search', 'pdf', 'url'].map((mode) => (
+          <TouchableOpacity 
+            key={mode}
+            onPress={() => setImportMode(mode as any)}
+            disabled={isLoading}
+            style={[
+              styles.modeBtn,
+              importMode === mode && styles.modeBtnActive
+            ]}
+          >
+            <Text style={[
+              styles.modeBtnText,
+              importMode === mode && styles.modeBtnTextActive
+            ]}>
+              {mode === 'search' ? 'ПОИСК' : mode === 'pdf' ? 'ФАЙЛ' : 'URL'}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
+
+      {importMode === 'search' && (
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>МОДЕЛЬ УСТРОЙСТВА</Text>
+          <View style={styles.searchRow}>
+            <View style={[styles.inputWrapper, { flex: 1 }]}>
+              <Search size={20} color={COLORS.muted} style={styles.inputIcon} />
+              <TextInput 
+                style={styles.input} 
+                placeholder="Напр: Vaillant ecoTEC plus"
+                value={model}
+                editable={!isLoading}
+                onChangeText={setModel}
+              />
+            </View>
+            <TouchableOpacity 
+              onPress={performSearch}
+              disabled={isLoading || !model}
+              style={styles.searchBtn}
+            >
+              {loadingStep === 'searching' ? <ActivityIndicator color={COLORS.white} /> : <Text style={styles.searchBtnText}>НАЙТИ</Text>}
+            </TouchableOpacity>
+          </View>
+
+          {searchResults.length > 0 && (
+            <View style={styles.resultsContainer}>
+              <Text style={styles.label}>РЕЗУЛЬТАТЫ ПОИСКА</Text>
+              <ScrollView style={styles.resultsScroll} nestedScrollEnabled>
+                {searchResults.map((res, idx) => (
+                  <TouchableOpacity
+                    key={idx}
+                    onPress={() => handleImport(res.url)}
+                    disabled={isLoading}
+                    style={styles.resultItem}
+                  >
+                    <View style={styles.resultInfo}>
+                      <Text style={styles.resultTitle} numberOfLines={1}>{res.title}</Text>
+                      <Text style={styles.resultUrl} numberOfLines={1}>{res.url}</Text>
+                    </View>
+                    <ChevronRight size={16} color={COLORS.muted} />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+        </View>
+      )}
+
+      {importMode === 'url' && (
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>ССЫЛКА НА ИНСТРУКЦИЮ</Text>
+          <View style={styles.inputWrapper}>
+            <Info size={20} color={COLORS.muted} style={styles.inputIcon} />
+            <TextInput 
+              style={styles.input} 
+              placeholder="https://example.com/manual.pdf"
+              value={url}
+              editable={!isLoading}
+              onChangeText={setUrl}
+              autoCapitalize="none"
+            />
+          </View>
+        </View>
+      )}
+
+      {importMode === 'pdf' && (
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>ИНСТРУКЦИЯ (PDF)</Text>
+          {!pdfUri ? (
+            <TouchableOpacity 
+              style={styles.uploadArea}
+              onPress={handleFileSelect}
+              disabled={isLoading}
+            >
+              <Plus size={32} color={COLORS.muted} />
+              <Text style={styles.uploadText}>Выбрать PDF файл</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.fileCard}>
+              <View style={styles.fileInfo}>
+                <Wrench size={24} color={COLORS.ink} />
+                <View>
+                  <Text style={styles.fileName} numberOfLines={1}>{pdfName}</Text>
+                  <Text style={styles.fileSize}>PDF Document</Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={() => setPdfUri(null)} disabled={isLoading}>
+                <Trash2 size={20} color={COLORS.muted} />
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      )}
 
       <View style={styles.inputGroup}>
         <Text style={styles.label}>МЕСТО УСТАНОВКИ</Text>
@@ -374,17 +535,48 @@ function AddView({ settings, onAdd }: { settings: AppSettings, onAdd: (e: Equipm
           style={[styles.input, { paddingLeft: 16 }]} 
           placeholder="Напр: Кухня, Гараж"
           value={location}
+          editable={!isLoading}
           onChangeText={setLocation}
         />
       </View>
 
+      {error && (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      )}
+
+      {isLoading && (
+        <View style={styles.progressContainer}>
+          <View style={styles.progressHeader}>
+            <Text style={styles.progressStatus}>
+              {loadingStep === 'extracting' && 'Извлечение текста...'}
+              {loadingStep === 'analyzing' && 'Анализ чанков...'}
+              {loadingStep === 'merging' && 'Слияние данных...'}
+            </Text>
+            <Text style={styles.progressPercent}>{progress}%</Text>
+          </View>
+          <View style={styles.progressBar}>
+            <MotiView 
+              from={{ width: '0%' }}
+              animate={{ width: `${progress}%` }}
+              style={styles.progressFill}
+            />
+          </View>
+        </View>
+      )}
+
       <TouchableOpacity 
-        style={[styles.primaryBtn, (!model || loading) && { opacity: 0.5 }]}
-        onPress={handleImport}
-        disabled={!model || loading}
+        style={[styles.primaryBtn, (isLoading || (importMode === 'search' ? !searchResults.length : importMode === 'url' ? !url : !pdfUri)) && { opacity: 0.5 }]}
+        onPress={() => handleImport()}
+        disabled={isLoading || (importMode === 'search' ? !searchResults.length : importMode === 'url' ? !url : !pdfUri)}
       >
-        {loading ? <ActivityIndicator color={COLORS.white} /> : <Text style={styles.primaryBtnText}>НАЙТИ И ИМПОРТИРОВАТЬ ТО</Text>}
+        {isLoading ? <ActivityIndicator color={COLORS.white} /> : <Text style={styles.primaryBtnText}>ЗАПУСТИТЬ ИМПОРТ</Text>}
       </TouchableOpacity>
+      
+      <Text style={styles.hintText}>
+        Алгоритм Map-Reduce проанализирует даже большие инструкции, разбивая их на части
+      </Text>
     </View>
   );
 }
@@ -530,5 +722,34 @@ const styles = StyleSheet.create({
   inputIcon: { position: 'absolute', left: 16, top: 16, zIndex: 1 },
   input: { backgroundColor: '#F5F5F4', borderRadius: 16, paddingVertical: 16, paddingRight: 16, paddingLeft: 48, fontSize: 15, color: COLORS.ink },
   primaryBtn: { backgroundColor: COLORS.accent, borderRadius: 20, paddingVertical: 18, alignItems: 'center', shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10, elevation: 5 },
-  primaryBtnText: { color: COLORS.white, fontWeight: '800', fontSize: 14, letterSpacing: 0.5 }
+  primaryBtnText: { color: COLORS.white, fontWeight: '800', fontSize: 14, letterSpacing: 0.5 },
+  modeSwitcher: { flexDirection: 'row', backgroundColor: COLORS.stone100, padding: 4, borderRadius: 12, marginBottom: 8 },
+  modeBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
+  modeBtnActive: { backgroundColor: COLORS.white, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
+  modeBtnText: { fontSize: 10, fontWeight: '800', color: COLORS.muted },
+  modeBtnTextActive: { color: COLORS.ink },
+  searchRow: { flexDirection: 'row', gap: 8 },
+  searchBtn: { backgroundColor: COLORS.accent, borderRadius: 16, paddingHorizontal: 16, justifyContent: 'center' },
+  searchBtnText: { color: COLORS.white, fontWeight: '800', fontSize: 12 },
+  resultsContainer: { marginTop: 12, gap: 8 },
+  resultsScroll: { maxHeight: 200 },
+  resultItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, backgroundColor: COLORS.stone50, borderRadius: 16, borderWidth: 1, borderColor: COLORS.border, marginBottom: 8 },
+  resultInfo: { flex: 1, marginRight: 12 },
+  resultTitle: { fontSize: 12, fontWeight: '800', color: COLORS.ink },
+  resultUrl: { fontSize: 10, color: COLORS.muted, marginTop: 2 },
+  uploadArea: { height: 120, borderWidth: 2, borderStyle: 'dashed', borderColor: COLORS.border, borderRadius: 24, justifyContent: 'center', alignItems: 'center', gap: 8, backgroundColor: COLORS.stone50 },
+  uploadText: { fontSize: 12, color: COLORS.muted, fontWeight: '600' },
+  fileCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: COLORS.stone50, borderRadius: 20, borderWidth: 1, borderColor: COLORS.border },
+  fileInfo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  fileName: { fontSize: 14, fontWeight: '800', color: COLORS.ink, maxWidth: 200 },
+  fileSize: { fontSize: 10, color: COLORS.muted },
+  errorBox: { padding: 12, backgroundColor: COLORS.errorBg, borderRadius: 16, borderWidth: 1, borderColor: '#FEE2E2' },
+  errorText: { fontSize: 12, color: COLORS.error, textAlign: 'center' },
+  progressContainer: { gap: 8 },
+  progressHeader: { flexDirection: 'row', justifyContent: 'space-between' },
+  progressStatus: { fontSize: 10, fontWeight: '800', color: COLORS.muted },
+  progressPercent: { fontSize: 10, fontWeight: '800', color: COLORS.ink },
+  progressBar: { height: 6, backgroundColor: COLORS.stone100, borderRadius: 3, overflow: 'hidden' },
+  progressFill: { height: '100%', backgroundColor: COLORS.accent },
+  hintText: { fontSize: 10, color: COLORS.muted, textAlign: 'center', paddingHorizontal: 20, lineHeight: 14 }
 });

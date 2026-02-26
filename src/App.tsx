@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, ChangeEvent } from 'react';
 import { 
   Plus, 
   Settings as SettingsIcon, 
@@ -11,7 +11,11 @@ import {
   Loader2,
   ArrowLeft,
   Trash2,
-  Info
+  Info,
+  FileText,
+  Upload,
+  X,
+  Link as LinkIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
@@ -23,6 +27,8 @@ import { Equipment, Task, AppSettings } from './types';
 import { storage } from './services/storage';
 import { maintenanceLogic } from './services/maintenance';
 import { yandexApi } from './services/yandex';
+import { pdfService } from './services/pdf';
+import { logger } from './services/logger';
 
 // Utility for tailwind classes
 function cn(...inputs: ClassValue[]) {
@@ -93,12 +99,14 @@ export default function App() {
             </h1>
           </div>
           {activeTab === 'list' && (
-            <button 
-              onClick={() => setActiveTab('settings')}
-              className="p-2 hover:bg-stone-100 rounded-full transition-colors"
-            >
-              <SettingsIcon size={20} className="text-stone-500" />
-            </button>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setActiveTab('settings')}
+                className="p-2 hover:bg-stone-100 rounded-full transition-colors"
+              >
+                <SettingsIcon size={20} className="text-stone-500" />
+              </button>
+            </div>
           )}
         </div>
       </header>
@@ -338,47 +346,96 @@ function TaskItem({ task, onComplete }: { task: Task, onComplete: () => void, ke
 function AddEquipmentView({ settings, onAdd, onCancel }: { settings: AppSettings, onAdd: (e: Equipment) => void, onCancel: () => void }) {
   const [model, setModel] = useState('');
   const [location, setLocation] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loadingStep, setLoadingStep] = useState<'idle' | 'searching' | 'extracting' | 'analyzing' | 'merging'>('idle');
+  const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [importMode, setImportMode] = useState<'search' | 'pdf' | 'url'>('search');
+  const [url, setUrl] = useState('');
+  const [searchResults, setSearchResults] = useState<{ title: string; url: string }[]>([]);
+  const [selectedUrl, setSelectedUrl] = useState<string | null>(null);
 
-  const handleImport = async () => {
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && file.type === 'application/pdf') {
+      setPdfFile(file);
+      setError(null);
+    } else if (file) {
+      setError('Пожалуйста, выберите PDF файл');
+    }
+  };
+
+  const performSearch = async () => {
     if (!model) return;
-    setLoading(true);
+    setLoadingStep('searching');
     setError(null);
+    try {
+      const results = await yandexApi.searchV2(model, settings);
+      setSearchResults(results);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoadingStep('idle');
+    }
+  };
+
+  const handleImport = async (targetUrl?: string, targetFile?: File) => {
+    const source = targetUrl || selectedUrl || url || (importMode === 'pdf' ? pdfFile : null);
+    if (!source) return;
+
+    setError(null);
+    setProgress(0);
 
     try {
-      // 1. Search (Simulated)
-      const urls = await yandexApi.searchInstructions(model, settings);
-      
-      // 2. Extract (Mocking the text extraction from PDF for this demo)
-      // In real app, we'd fetch the PDF and use PDF.js
-      const mockText = `Регламент обслуживания ${model}. 
-      Проверка давления: каждые 6 месяцев. Инструкция: открыть кран, проверить манометр.
-      Чистка фильтра: раз в год. Инструкция: снять крышку, промыть сетку.
-      Правило: всегда отключать питание перед работой.`;
+      let extracted: { text: string; rules: string[] };
 
-      const aiData = await yandexApi.extractData(mockText, settings);
+      // 1. Extraction
+      setLoadingStep('extracting');
+      if (typeof source === 'string') {
+        extracted = await pdfService.extractFromUrl(source, (p) => setProgress(p));
+      } else {
+        extracted = await pdfService.extractRelevantText(source as File, (p) => setProgress(p));
+      }
+
+      // 2. Chunking
+      const chunks = pdfService.chunkText(extracted.text);
+      
+      // 3. Parallel Analysis (Map)
+      setLoadingStep('analyzing');
+      const allTasks: any[] = [];
+      for (let i = 0; i < chunks.length; i++) {
+        setProgress(Math.round(((i + 1) / chunks.length) * 100));
+        const chunkTasks = await yandexApi.processChunk(chunks[i], settings);
+        allTasks.push(...chunkTasks);
+      }
+
+      // 4. Merging (Reduce)
+      setLoadingStep('merging');
+      const finalData = await yandexApi.mergeResults(allTasks, extracted.rules, settings);
 
       const newEquip: Equipment = {
         id: Math.random().toString(36).substr(2, 9),
-        name: aiData.name || model,
-        type: aiData.type || 'Оборудование',
+        name: finalData.name || model || (typeof source === 'string' ? 'Устройство из сети' : (source as File).name.replace('.pdf', '')),
+        type: finalData.type || 'Оборудование',
         location: location || 'Дом',
-        maintenance_schedule: (aiData.maintenance_schedule || []).map((t: any) => ({
+        maintenance_schedule: (finalData.maintenance_schedule || []).map((t: any) => ({
           ...t,
           id: Math.random().toString(36).substr(2, 9),
           lastCompletedDate: null
         })),
-        important_rules: aiData.important_rules || []
+        important_rules: finalData.important_rules || []
       };
 
       onAdd(newEquip);
     } catch (err: any) {
-      setError(err.message || 'Ошибка импорта. Проверьте API ключи.');
+      setError(err.message || 'Ошибка обработки. Проверьте API ключи.');
     } finally {
-      setLoading(false);
+      setLoadingStep('idle');
+      setProgress(0);
     }
   };
+
+  const isLoading = loadingStep !== 'idle';
 
   return (
     <motion.div 
@@ -386,20 +443,135 @@ function AddEquipmentView({ settings, onAdd, onCancel }: { settings: AppSettings
       animate={{ opacity: 1, y: 0 }}
       className="space-y-6"
     >
-      <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-200 space-y-4">
-        <div className="space-y-2">
-          <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400 ml-1">Модель устройства</label>
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
-            <input 
-              type="text" 
-              placeholder="Напр: Vaillant ecoTEC plus"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="w-full pl-12 pr-4 py-4 bg-stone-50 border-none rounded-2xl focus:ring-2 focus:ring-stone-200 transition-all outline-none text-stone-900"
-            />
-          </div>
+      <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-200 space-y-6">
+        {/* Mode Switcher */}
+        <div className="flex bg-stone-100 p-1 rounded-xl">
+          {['search', 'pdf', 'url'].map((mode) => (
+            <button 
+              key={mode}
+              onClick={() => setImportMode(mode as any)}
+              disabled={isLoading}
+              className={cn(
+                "flex-1 py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all",
+                importMode === mode ? "bg-white text-stone-900 shadow-sm" : "text-stone-400"
+              )}
+            >
+              {mode === 'search' ? 'Поиск' : mode === 'pdf' ? 'Файл' : 'URL'}
+            </button>
+          ))}
         </div>
+
+        {importMode === 'search' && (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400 ml-1">Модель устройства</label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
+                  <input 
+                    type="text" 
+                    placeholder="Напр: Vaillant ecoTEC plus"
+                    value={model}
+                    disabled={isLoading}
+                    onChange={(e) => setModel(e.target.value)}
+                    className="w-full pl-12 pr-4 py-4 bg-stone-50 border-none rounded-2xl focus:ring-2 focus:ring-stone-200 transition-all outline-none text-stone-900 disabled:opacity-50"
+                  />
+                </div>
+                <button 
+                  onClick={performSearch}
+                  disabled={isLoading || !model}
+                  className="px-6 bg-stone-900 text-white rounded-2xl font-bold disabled:opacity-50"
+                >
+                  {loadingStep === 'searching' ? <Loader2 className="animate-spin" size={20} /> : 'Найти'}
+                </button>
+              </div>
+            </div>
+
+            {searchResults.length > 0 && (
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400 ml-1">Результаты поиска</label>
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                  {searchResults.map((res, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => handleImport(res.url)}
+                      disabled={isLoading}
+                      className="w-full text-left p-3 bg-stone-50 hover:bg-stone-100 rounded-xl border border-stone-200 transition-colors group"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-stone-900 line-clamp-1">{res.title}</span>
+                          <span className="text-[10px] text-stone-400 truncate max-w-[200px]">{res.url}</span>
+                        </div>
+                        <ChevronRight size={16} className="text-stone-300 group-hover:text-stone-900 transition-colors" />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {importMode === 'url' && (
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400 ml-1">Ссылка на инструкцию</label>
+            <div className="relative">
+              <LinkIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
+              <input 
+                type="url" 
+                placeholder="https://example.com/manual.pdf"
+                value={url}
+                disabled={isLoading}
+                onChange={(e) => setUrl(e.target.value)}
+                className="w-full pl-12 pr-4 py-4 bg-stone-50 border-none rounded-2xl focus:ring-2 focus:ring-stone-200 transition-all outline-none text-stone-900 disabled:opacity-50"
+              />
+            </div>
+          </div>
+        )}
+
+        {importMode === 'pdf' && (
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400 ml-1">Инструкция (PDF)</label>
+            <div className="relative">
+              {!pdfFile ? (
+                <label className={cn(
+                  "flex flex-col items-center justify-center w-full h-32 bg-stone-50 border-2 border-dashed border-stone-200 rounded-2xl cursor-pointer hover:bg-stone-100 transition-all",
+                  isLoading && "opacity-50 cursor-not-allowed"
+                )}>
+                  <Upload className="text-stone-400 mb-2" size={24} />
+                  <span className="text-xs text-stone-500">Выберите или перетащите файл</span>
+                  <input 
+                    type="file" 
+                    accept="application/pdf"
+                    disabled={isLoading}
+                    onChange={handleFileChange}
+                    className="hidden" 
+                  />
+                </label>
+              ) : (
+                <div className="flex items-center justify-between p-4 bg-stone-50 rounded-2xl border border-stone-200">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-red-100 text-red-600 rounded-lg">
+                      <FileText size={20} />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold text-stone-900 truncate max-w-[180px]">{pdfFile.name}</span>
+                      <span className="text-[10px] text-stone-400">{(pdfFile.size / 1024 / 1024).toFixed(2)} MB</span>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setPdfFile(null)}
+                    disabled={isLoading}
+                    className="p-1 hover:bg-stone-200 rounded-full transition-colors disabled:opacity-50"
+                  >
+                    <X size={16} className="text-stone-400" />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="space-y-2">
           <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400 ml-1">Место установки</label>
@@ -407,8 +579,9 @@ function AddEquipmentView({ settings, onAdd, onCancel }: { settings: AppSettings
             type="text" 
             placeholder="Напр: Кухня, Подвал"
             value={location}
+            disabled={isLoading}
             onChange={(e) => setLocation(e.target.value)}
-            className="w-full px-4 py-4 bg-stone-50 border-none rounded-2xl focus:ring-2 focus:ring-stone-200 transition-all outline-none text-stone-900"
+            className="w-full px-4 py-4 bg-stone-50 border-none rounded-2xl focus:ring-2 focus:ring-stone-200 transition-all outline-none text-stone-900 disabled:opacity-50"
           />
         </div>
 
@@ -418,23 +591,44 @@ function AddEquipmentView({ settings, onAdd, onCancel }: { settings: AppSettings
           </div>
         )}
 
+        {isLoading && (
+          <div className="space-y-2">
+            <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-stone-400">
+              <span>
+                {loadingStep === 'extracting' && 'Извлечение текста...'}
+                {loadingStep === 'analyzing' && 'Анализ чанков...'}
+                {loadingStep === 'merging' && 'Слияние данных...'}
+              </span>
+              <span>{progress}%</span>
+            </div>
+            <div className="h-1.5 bg-stone-100 rounded-full overflow-hidden">
+              <motion.div 
+                className="h-full bg-stone-900"
+                initial={{ width: 0 }}
+                animate={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+        )}
+
         <button 
-          onClick={handleImport}
-          disabled={loading || !model}
+          onClick={() => handleImport()}
+          disabled={isLoading || (importMode === 'search' ? !selectedUrl : importMode === 'url' ? !url : !pdfFile)}
           className="w-full py-4 bg-stone-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:scale-100 active:scale-95 transition-all shadow-xl shadow-stone-200"
         >
-          {loading ? <Loader2 className="animate-spin" size={20} /> : <Wrench size={20} />}
-          {loading ? 'Анализируем...' : 'Найти и импортировать ТО'}
+          {isLoading ? <Loader2 className="animate-spin" size={20} /> : <Wrench size={20} />}
+          {isLoading ? 'Обработка...' : 'Запустить импорт'}
         </button>
         
         <p className="text-[10px] text-stone-400 text-center px-4">
-          ИИ автоматически найдет инструкцию и составит график обслуживания
+          Алгоритм Map-Reduce проанализирует даже большие инструкции, разбивая их на части
         </p>
       </div>
 
       <button 
         onClick={onCancel}
-        className="w-full py-4 text-stone-400 font-bold text-sm"
+        disabled={isLoading}
+        className="w-full py-4 text-stone-400 font-bold text-sm disabled:opacity-50"
       >
         Отмена
       </button>
