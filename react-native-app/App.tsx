@@ -303,7 +303,7 @@ function TaskCard({ task, onComplete }: { task: Task, onComplete: () => void | P
         </TouchableOpacity>
       </View>
       
-      {task.instructions.length > 0 && (
+      {task.instructions && task.instructions.length > 0 && (
         <View style={styles.instructionContainer}>
           <TouchableOpacity onPress={() => setShowInfo(!showInfo)} style={styles.infoToggle}>
             <Info size={14} color={COLORS.muted} />
@@ -406,6 +406,7 @@ function AddView({ settings, onAdd }: { settings: AppSettings, onAdd: (e: Equipm
         location: location || 'Дом',
         maintenance_schedule: (finalData.maintenance_schedule || []).map((t: any) => ({
           ...t,
+          instructions: t.instructions || [],
           id: Math.random().toString(36).substr(2, 9),
           lastCompletedDate: null
         })),
