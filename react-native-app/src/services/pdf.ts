@@ -1,4 +1,5 @@
 import { AppSettings } from '../types';
+import { CONFIG } from '../config';
 
 export const pdfService = {
   async extractRelevantText(fileUri: string, onProgress?: (p: number) => void): Promise<{ text: string; rules: string[] }> {
@@ -7,7 +8,7 @@ export const pdfService = {
     try {
       if (onProgress) onProgress(10);
 
-      const response = await fetch('/api/pdf/extract', {
+      const response = await fetch(`${CONFIG.API_BASE_URL}/api/pdf/extract`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: fileUri })

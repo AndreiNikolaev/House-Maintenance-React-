@@ -1,4 +1,5 @@
 import { AppSettings, Equipment } from '../types';
+import { CONFIG } from '../config';
 
 export const yandexApi = {
   async searchV2(query: string, settings: AppSettings): Promise<{ title: string; url: string }[]> {
@@ -8,7 +9,7 @@ export const yandexApi = {
       throw new Error('Search API Key or Folder ID missing in settings');
 
     try {
-      const response = await fetch('/api/yandex/search', {
+      const response = await fetch(`${CONFIG.API_BASE_URL}/api/yandex/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -36,23 +37,25 @@ export const yandexApi = {
     console.log(`[REQUEST] YandexGPT.processChunk: textLength=${text.length}`);
 
     try {
-      const response = await fetch('https://llm.api.cloud.yandex.net/foundationModels/v1/completion', {
+      const response = await fetch(`${CONFIG.API_BASE_URL}/api/yandex/gpt`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Api-Key ${settings.yandexApiKey}`,
-          'x-folder-id': settings.yandexFolderId
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          modelUri: `gpt://${settings.yandexFolderId}/yandexgpt/latest`,
-          completionOptions: { temperature: 0.1, maxTokens: 2000 },
-          messages: [
-            {
-              role: 'system',
-              text: 'Ты — технический ассистент. Извлеки список регламентных работ по техническому обслуживанию из предоставленного фрагмента текста. Если работ нет, верни пустой массив []. Формат: строго JSON массив объектов { "task_name": string, "periodicity": string, "instructions": string[] }.'
-            },
-            { role: 'user', text }
-          ]
+          apiKey: settings.yandexApiKey,
+          folderId: settings.yandexFolderId,
+          body: {
+            modelUri: `gpt://${settings.yandexFolderId}/yandexgpt/latest`,
+            completionOptions: { temperature: 0.1, maxTokens: 2000 },
+            messages: [
+              {
+                role: 'system',
+                text: 'Ты — технический ассистент. Извлеки список регламентных работ по техническому обслуживанию из предоставленного фрагмента текста. Если работ нет, верни пустой массив []. Формат: строго JSON массив объектов { "task_name": string, "periodicity": string, "instructions": string[] }.'
+              },
+              { role: 'user', text }
+            ]
+          }
         })
       });
 
@@ -73,23 +76,25 @@ export const yandexApi = {
     console.log(`[REQUEST] YandexGPT.mergeResults: tasksCount=${tasks.length}`);
 
     try {
-      const response = await fetch('https://llm.api.cloud.yandex.net/foundationModels/v1/completion', {
+      const response = await fetch(`${CONFIG.API_BASE_URL}/api/yandex/gpt`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Api-Key ${settings.yandexApiKey}`,
-          'x-folder-id': settings.yandexFolderId
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          modelUri: `gpt://${settings.yandexFolderId}/yandexgpt/latest`,
-          completionOptions: { temperature: 0.2, maxTokens: 2000 },
-          messages: [
-            {
-              role: 'system',
-              text: 'Ты — технический эксперт. Тебе дан список задач по ТО и правил, извлеченных из разных частей инструкции. Твоя задача: 1. Удалить дубликаты. 2. Слить похожие задачи, выбрав наиболее безопасный (частый) интервал. 3. Выделить 3-5 самых важных правил безопасности. Формат: строго JSON { "name": string, "type": string, "maintenance_schedule": [...], "important_rules": [...] }.'
-            },
-            { role: 'user', text: JSON.stringify({ tasks, rules }) }
-          ]
+          apiKey: settings.yandexApiKey,
+          folderId: settings.yandexFolderId,
+          body: {
+            modelUri: `gpt://${settings.yandexFolderId}/yandexgpt/latest`,
+            completionOptions: { temperature: 0.2, maxTokens: 2000 },
+            messages: [
+              {
+                role: 'system',
+                text: 'Ты — технический эксперт. Тебе дан список задач по ТО и правил, извлеченных из разных частей инструкции. Твоя задача: 1. Удалить дубликаты. 2. Слить похожие задачи, выбрав наиболее безопасный (частый) интервал. 3. Выделить 3-5 самых важных правил безопасности. Формат: строго JSON { "name": string, "type": string, "maintenance_schedule": [...], "important_rules": [...] }.'
+              },
+              { role: 'user', text: JSON.stringify({ tasks, rules }) }
+            ]
+          }
         })
       });
 
