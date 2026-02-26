@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+// Version: 1.0.1 - Removed Moti
 import { 
   StyleSheet, 
   Text, 
