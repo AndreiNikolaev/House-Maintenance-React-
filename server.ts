@@ -1,6 +1,5 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
-import fetch from "node-fetch"; // node-fetch for server-side requests if needed, but native fetch is in node 18+
 
 async function startServer() {
   const app = express();
@@ -10,17 +9,48 @@ async function startServer() {
 
   // API Proxy for Yandex Search
   app.post("/api/yandex/search", async (req, res) => {
-    const { query, apiKey } = req.body;
+    const { query, apiKey, folderId } = req.body;
+    if (!apiKey || !folderId) return res.status(400).json({ error: "API Key and Folder ID are required" });
+
     try {
-      // In a real scenario, you'd call Yandex Search API here
-      // For now, we'll keep the mock logic but on the server side
-      const mockResults = [
-        { title: `Инструкция ${query} (Официальный PDF)`, url: `https://example.com/manuals/${query.replace(/\s+/g, '_')}_manual.pdf` },
-        { title: `Руководство пользователя ${query}`, url: `https://manuals-lib.ru/data/${query.replace(/\s+/g, '_')}.pdf` },
-        { title: `Технический регламент ${query}`, url: `https://service-center.pro/docs/service_${query.replace(/\s+/g, '_')}.pdf` }
-      ];
-      res.json(mockResults);
+      const url = `https://searchapi.cloud.yandex.net/v1/search?folderid=${folderId}&query=${encodeURIComponent(query + " инструкция по эксплуатации filetype:pdf")}`;
+      
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Api-Key ${apiKey}`
+        }
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Search API error: ${response.status} ${errText}`);
+      }
+
+      const xmlText = await response.text();
+      
+      const results: { title: string; url: string }[] = [];
+      const docRegex = /<doc[^>]*>([\s\S]*?)<\/doc>/g;
+      const urlRegex = /<url>([\s\S]*?)<\/url>/;
+      const titleRegex = /<title>([\s\S]*?)<\/title>/;
+
+      let match;
+      while ((match = docRegex.exec(xmlText)) !== null) {
+        const docContent = match[1];
+        const urlMatch = urlRegex.exec(docContent);
+        const titleMatch = titleRegex.exec(docContent);
+        
+        if (urlMatch && titleMatch) {
+          const cleanTitle = titleMatch[1].replace(/<[^>]*>/g, '').trim();
+          results.push({
+            title: cleanTitle,
+            url: urlMatch[1].trim()
+          });
+        }
+      }
+
+      res.json(results.slice(0, 10));
     } catch (err: any) {
+      console.error("[SERVER ERROR] Yandex Search Proxy:", err.message);
       res.status(500).json({ error: err.message });
     }
   });

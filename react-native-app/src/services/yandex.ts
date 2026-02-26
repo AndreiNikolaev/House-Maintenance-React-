@@ -4,19 +4,28 @@ export const yandexApi = {
   async searchV2(query: string, settings: AppSettings): Promise<{ title: string; url: string }[]> {
     console.log(`[REQUEST] YandexSearch.searchV2: ${query}`);
     
-    if (!settings.yandexSearchApiKey) throw new Error('Search API Key missing');
+    if (!settings.yandexSearchApiKey || !settings.yandexFolderId) 
+      throw new Error('Search API Key or Folder ID missing in settings');
 
     try {
-      // In a real app, this would be a direct call to Yandex Search API v2
-      // For this demo, we simulate the structure of Yandex Search API v2 response
-      const mockResults = [
-        { title: `Инструкция ${query} (Официальный PDF)`, url: `https://example.com/manuals/${query.replace(/\s+/g, '_')}_manual.pdf` },
-        { title: `Руководство пользователя ${query}`, url: `https://manuals-lib.ru/data/${query.replace(/\s+/g, '_')}.pdf` },
-        { title: `Технический регламент ${query}`, url: `https://service-center.pro/docs/service_${query.replace(/\s+/g, '_')}.pdf` }
-      ];
+      const response = await fetch('/api/yandex/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query,
+          apiKey: settings.yandexSearchApiKey,
+          folderId: settings.yandexFolderId
+        })
+      });
 
-      console.log(`[RESPONSE] YandexSearch.searchV2:`, mockResults);
-      return mockResults;
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Search failed');
+      }
+
+      const results = await response.json();
+      console.log(`[RESPONSE] YandexSearch.searchV2: found ${results.length} results`);
+      return results;
     } catch (err: any) {
       console.error(`[ERROR] YandexSearch.searchV2:`, err.message);
       throw err;
