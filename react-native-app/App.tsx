@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -9,7 +9,8 @@ import {
   SafeAreaView, 
   Alert,
   ActivityIndicator,
-  StatusBar
+  StatusBar,
+  Animated
 } from 'react-native';
 import { 
   Plus, 
@@ -24,7 +25,6 @@ import {
   Trash2,
   Info
 } from 'lucide-react-native';
-import { MotiView, AnimatePresence } from 'moti';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 
@@ -277,7 +277,7 @@ function StatusBadge({ item }: { item: Equipment }) {
   );
 }
 
-function TaskCard({ task, onComplete }: { task: Task, onComplete: () => void }) {
+function TaskCard({ task, onComplete }: { task: Task, onComplete: () => void | Promise<void>, key?: string }) {
   const isOverdue = maintenanceLogic.isOverdue(task.lastCompletedDate, task.periodicity);
   const nextDate = maintenanceLogic.getNextDate(task.lastCompletedDate, task.periodicity);
   const [showInfo, setShowInfo] = useState(false);
@@ -332,6 +332,16 @@ function AddView({ settings, onAdd }: { settings: AppSettings, onAdd: (e: Equipm
   const [importMode, setImportMode] = useState<'search' | 'pdf' | 'url'>('search');
   const [url, setUrl] = useState('');
   const [searchResults, setSearchResults] = useState<{ title: string; url: string }[]>([]);
+
+  const animatedProgress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(animatedProgress, {
+      toValue: progress,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  }, [progress]);
 
   const handleFileSelect = async () => {
     // In a real Expo app, we would use expo-document-picker
@@ -557,10 +567,14 @@ function AddView({ settings, onAdd }: { settings: AppSettings, onAdd: (e: Equipm
             <Text style={styles.progressPercent}>{progress}%</Text>
           </View>
           <View style={styles.progressBar}>
-            <MotiView 
-              from={{ width: '0%' }}
-              animate={{ width: `${progress}%` }}
-              style={styles.progressFill}
+            <Animated.View 
+              style={[
+                styles.progressFill,
+                { width: animatedProgress.interpolate({
+                  inputRange: [0, 100],
+                  outputRange: ['0%', '100%']
+                }) }
+              ]}
             />
           </View>
         </View>
