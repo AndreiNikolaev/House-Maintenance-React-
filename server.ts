@@ -1,5 +1,6 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
+import * as pdfjs from 'pdfjs-dist';
 
 async function startServer() {
   const app = express();
@@ -92,6 +93,36 @@ async function startServer() {
       res.send(Buffer.from(buffer));
     } catch (err: any) {
       res.status(500).send(err.message);
+    }
+  });
+
+  // PDF Extraction API
+  app.post("/api/pdf/extract", async (req, res) => {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: "URL is required" });
+
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Failed to fetch PDF: ${response.status}`);
+      const buffer = await response.arrayBuffer();
+
+      const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer) });
+      const pdf = await loadingTask.promise;
+      
+      let fullText = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items
+          .map((item: any) => item.str)
+          .join(' ');
+        fullText += `--- Page ${i} ---\n${pageText}\n\n`;
+      }
+
+      res.json({ text: fullText });
+    } catch (err: any) {
+      console.error("[SERVER ERROR] PDF Extraction:", err.message);
+      res.status(500).json({ error: err.message });
     }
   });
 

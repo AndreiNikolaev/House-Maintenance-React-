@@ -1,49 +1,35 @@
 import { AppSettings } from '../types';
 
-import * as pdfjs from 'pdfjs-dist';
-
-// Set worker source to CDN for the preview environment
-// @ts-ignore
-pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.4.624/pdf.worker.min.js`;
-
 export const pdfService = {
   async extractRelevantText(fileUri: string, onProgress?: (p: number) => void): Promise<{ text: string; rules: string[] }> {
     console.log(`[REQUEST] PDFService.extractRelevantText: ${fileUri}`);
     
     try {
-      // Use proxy to bypass CORS if it's a remote URL
-      const targetUrl = fileUri.startsWith('http') 
-        ? `/api/proxy?url=${encodeURIComponent(fileUri)}` 
-        : fileUri;
+      if (onProgress) onProgress(10);
 
-      // Use pdfjs-dist to extract text from the PDF
-      const loadingTask = pdfjs.getDocument(targetUrl);
-      const pdf = await loadingTask.promise;
-      
-      let fullText = '';
-      const totalPages = pdf.numPages;
+      const response = await fetch('/api/pdf/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: fileUri })
+      });
 
-      for (let i = 1; i <= totalPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const pageText = textContent.items
-          .map((item: any) => item.str)
-          .join(' ');
-        
-        fullText += `--- Page ${i} ---\n${pageText}\n\n`;
-        
-        if (onProgress) {
-          onProgress(Math.round((i / totalPages) * 100));
-        }
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'PDF extraction failed');
       }
 
-      console.log(`[RESPONSE] PDFService.extractRelevantText: length=${fullText.length}`);
+      if (onProgress) onProgress(90);
+      const data = await response.json();
       
-      if (fullText.trim().length < 50) {
+      if (onProgress) onProgress(100);
+
+      console.log(`[RESPONSE] PDFService.extractRelevantText: length=${data.text.length}`);
+      
+      if (data.text.trim().length < 50) {
         throw new Error('PDF seems to be empty or contains no extractable text (might be a scan).');
       }
 
-      return { text: fullText, rules: [] };
+      return { text: data.text, rules: [] };
     } catch (err: any) {
       console.error(`[ERROR] PDFService.extractRelevantText:`, err.message);
       throw new Error(`Failed to extract text from PDF: ${err.message}`);
@@ -65,8 +51,6 @@ export const pdfService = {
 
   async extractFromUrl(url: string, onProgress?: (p: number) => void): Promise<{ text: string; rules: string[] }> {
     console.log(`[REQUEST] PDFService.extractFromUrl: ${url}`);
-    // In RN, we can fetch the file directly or use a proxy if needed.
-    // Since RN doesn't have CORS, we can try direct fetch.
     try {
       return this.extractRelevantText(url, onProgress);
     } catch (err: any) {
