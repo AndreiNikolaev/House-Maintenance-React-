@@ -1,12 +1,28 @@
 import express from "express";
+import cors from "cors";
 import { createServer as createViteServer } from "vite";
 import * as pdfjs from 'pdfjs-dist';
+import DOMMatrix from 'dommatrix';
+
+// Polyfill DOMMatrix for pdfjs-dist in Node.js
+(global as any).DOMMatrix = DOMMatrix;
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  app.use(cors());
   app.use(express.json({ limit: '50mb' }));
+
+  // Request logging middleware
+  app.use((req, res, next) => {
+    console.log(`[SERVER] ${req.method} ${req.url}`);
+    next();
+  });
+
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", time: new Date().toISOString() });
+  });
 
   // API Proxy for Yandex Search
   app.post("/api/yandex/search", async (req, res) => {

@@ -7,8 +7,10 @@ export const pdfService = {
     
     try {
       if (onProgress) onProgress(10);
+      const url = `${CONFIG.API_BASE_URL}/api/pdf/extract`;
+      console.log(`[REQUEST] PDFService fetching from: ${url}`);
 
-      const response = await fetch(`${CONFIG.API_BASE_URL}/api/pdf/extract`, {
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: fileUri })

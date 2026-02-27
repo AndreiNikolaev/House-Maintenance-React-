@@ -2,6 +2,19 @@ import { AppSettings, Equipment } from '../types';
 import { CONFIG } from '../config';
 
 export const yandexApi = {
+  async checkConnection(): Promise<boolean> {
+    try {
+      console.log(`[CONNECTIVITY] Checking connection to: ${CONFIG.API_BASE_URL}/api/health`);
+      const response = await fetch(`${CONFIG.API_BASE_URL}/api/health`);
+      const data = await response.json();
+      console.log(`[CONNECTIVITY] Success:`, data);
+      return response.ok;
+    } catch (err: any) {
+      console.error(`[CONNECTIVITY] Failed:`, err.message);
+      return false;
+    }
+  },
+
   async searchV2(query: string, settings: AppSettings): Promise<{ title: string; url: string }[]> {
     console.log(`[REQUEST] YandexSearch.searchV2: ${query}`);
     
