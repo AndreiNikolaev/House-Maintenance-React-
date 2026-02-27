@@ -1,6 +1,7 @@
 import './polyfill';
 import express from "express";
 import cors from "cors";
+import path from "path";
 import { createServer as createViteServer } from "vite";
 import * as pdfjs from 'pdfjs-dist';
 
@@ -85,6 +86,22 @@ async function startServer() {
       res.status(response.status).json(data);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Proxy for downloading PDFs (CORS bypass)
+  app.get("/api/proxy", async (req, res) => {
+    const url = req.query.url as string;
+    if (!url) return res.status(400).send("URL is required");
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
+      const contentType = response.headers.get("content-type");
+      if (contentType) res.setHeader("Content-Type", contentType);
+      const buffer = await response.arrayBuffer();
+      res.send(Buffer.from(buffer));
+    } catch (err: any) {
+      res.status(500).send(err.message);
     }
   });
 

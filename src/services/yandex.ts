@@ -1,9 +1,10 @@
 import { AppSettings, Equipment } from '../types';
 import { logger } from './logger';
+import { CONFIG } from '../config';
 
 export const yandexApi = {
   async searchV2(query: string, settings: AppSettings): Promise<{ title: string; url: string }[]> {
-    const url = '/api/yandex/search';
+    const url = `${CONFIG.API_BASE_URL}/api/yandex/search`;
     logger.add('request', 'YandexSearch', 'searchV2', { query, to: url });
     
     if (!settings.yandexSearchApiKey || !settings.yandexFolderId) {
@@ -17,6 +18,7 @@ export const yandexApi = {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
+        credentials: 'include',
         body: JSON.stringify({ 
           query, 
           apiKey: settings.yandexSearchApiKey,
@@ -57,9 +59,10 @@ export const yandexApi = {
     logger.add('request', 'YandexGPT', 'processChunk', { textLength: text.length });
 
     try {
-      const response = await fetch('/api/yandex/gpt', {
+      const response = await fetch(`${CONFIG.API_BASE_URL}/api/yandex/gpt`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           apiKey: settings.yandexApiKey,
           folderId: settings.yandexFolderId,
@@ -95,9 +98,10 @@ export const yandexApi = {
     logger.add('request', 'YandexGPT', 'mergeResults', { tasksCount: tasks.length });
 
     try {
-      const response = await fetch('/api/yandex/gpt', {
+      const response = await fetch(`${CONFIG.API_BASE_URL}/api/yandex/gpt`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           apiKey: settings.yandexApiKey,
           folderId: settings.yandexFolderId,
