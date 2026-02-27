@@ -8,96 +8,63 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Standard CORS with credentials support
+  // 1. CORS & Headers
   app.use(cors({
-    origin: (origin, callback) => {
-      // Allow all origins to support the dynamic AI Studio preview URLs
-      callback(null, true);
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-folder-id', 'Accept', 'x-client-version']
+    origin: true,
+    credentials: true
   }));
-
   app.use(express.json({ limit: '50mb' }));
-  app.use(express.urlencoded({ extended: true }));
 
-  // Super Logger - Log EVERY request to /api at the very beginning
+  // 2. Logger
   app.use((req, res, next) => {
     if (req.url.includes('/api')) {
-      console.log(`[V9 MONITOR] ${req.method} ${req.url} | Origin: ${req.headers.origin} | Cookie: ${req.headers.cookie ? 'Present' : 'Missing'}`);
+      console.log(`[V10 MONITOR] ${req.method} ${req.url} | Cookies: ${req.headers.cookie ? 'YES' : 'NO'}`);
     }
     next();
   });
 
-  // Health check
+  // 3. API Routes
   app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", version: "V9", time: new Date().toISOString() });
+    res.json({ status: "ok", version: "V10" });
   });
 
-  // PDF Extraction API
   app.post("/api/pdf/extract", async (req, res) => {
-    console.log(`[V9 API] Hit /api/pdf/extract`);
+    console.log("[V10 API] PDF Extract");
     const { url } = req.body;
-    if (!url) return res.status(400).json({ error: "URL is required" });
-
     try {
       const response = await fetch(url);
-      if (!response.ok) throw new Error(`Failed to fetch PDF: ${response.status}`);
       const buffer = await response.arrayBuffer();
-
-      const loadingTask = pdfjs.getDocument({ 
-        data: new Uint8Array(buffer),
-        useSystemFonts: true,
-        disableFontFace: true
-      });
-      const pdf = await loadingTask.promise;
-      
-      let fullText = '';
+      const pdf = await pdfjs.getDocument({ data: new Uint8Array(buffer), useSystemFonts: true, disableFontFace: true }).promise;
+      let text = '';
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const pageText = textContent.items.map((item: any) => item.str).join(' ');
-        fullText += `--- Page ${i} ---\n${pageText}\n\n`;
+        const content = await page.getTextContent();
+        text += content.items.map((item: any) => item.str).join(' ') + '\n';
       }
-      res.json({ text: fullText });
+      res.json({ text });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  // API Proxy for Yandex Search
   app.post("/api/yandex/search", async (req, res) => {
-    console.log(`[V9 API] Hit /api/yandex/search`);
+    console.log("[V10 API] Yandex Search");
     const { query, apiKey, folderId } = req.body;
-    if (!apiKey || !folderId) return res.status(400).json({ error: "Keys required" });
-
     try {
-      const response = await fetch(`https://searchapi.api.cloud.yandex.net/v2/web/search`, {
+      const response = await fetch('https://searchapi.api.cloud.yandex.net/v2/web/search', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Api-Key ${apiKey}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Api-Key ${apiKey}` },
         body: JSON.stringify({
-          query: {
-            searchType: "SEARCH_TYPE_RU",
-            queryText: `${query} инструкция по эксплуатации filetype:pdf`
-          },
-          folderId,
-          responseFormat: "FORMAT_XML"
+          query: { searchType: "SEARCH_TYPE_RU", queryText: `${query} инструкция по эксплуатации filetype:pdf` },
+          folderId, responseFormat: "FORMAT_XML"
         })
       });
-
       const data = await response.json();
-      const xmlText = Buffer.from(data.rawData, 'base64').toString('utf8');
+      const xml = Buffer.from(data.rawData, 'base64').toString('utf8');
       const results: any[] = [];
-      const docRegex = /<doc[^>]*>([\s\S]*?)<\/doc>/g;
-      let match;
-      while ((match = docRegex.exec(xmlText)) !== null) {
-        const url = /<url>([\s\S]*?)<\/url>/.exec(match[1])?.[1];
-        const title = /<title>([\s\S]*?)<\/title>/.exec(match[1])?.[1]?.replace(/<[^>]*>/g, '');
-        if (url && title) results.push({ title, url });
+      const matches = xml.matchAll(/<doc>[\s\S]*?<url>(.*?)<\/url>[\s\S]*?<title>(.*?)<\/title>/g);
+      for (const m of matches) {
+        results.push({ url: m[1], title: m[2].replace(/<[^>]*>/g, '') });
       }
       res.json(results.slice(0, 10));
     } catch (err: any) {
@@ -105,18 +72,13 @@ async function startServer() {
     }
   });
 
-  // API Proxy for YandexGPT
   app.post("/api/yandex/gpt", async (req, res) => {
-    console.log(`[V9 API] Hit /api/yandex/gpt`);
+    console.log("[V10 API] Yandex GPT");
     const { apiKey, folderId, body } = req.body;
     try {
       const response = await fetch('https://llm.api.cloud.yandex.net/foundationModels/v1/completion', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Api-Key ${apiKey}`,
-          'x-folder-id': folderId
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Api-Key ${apiKey}`, 'x-folder-id': folderId },
         body: JSON.stringify(body)
       });
       const data = await response.json();
@@ -126,27 +88,19 @@ async function startServer() {
     }
   });
 
-  // API 404 Handler
+  // 4. API 404 (Safety net before Vite)
   app.all("/api*", (req, res) => {
-    console.log(`[V9 API] 404: ${req.method} ${req.url}`);
-    res.status(404).json({ error: `API Route not found: ${req.url}` });
+    console.warn(`[V10 API] 404 Not Found: ${req.url}`);
+    res.status(404).json({ error: "API route not found" });
   });
 
-  // Vite middleware for development
+  // 5. Vite / Static
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    
-    app.use((req, res, next) => {
-      if (req.url.startsWith('/api')) {
-        console.warn(`[VITE WARNING] API request leaked to Vite: ${req.url}`);
-      }
-      vite.middlewares(req, res, next);
-    });
+    const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
+    app.use(vite.middlewares);
   } else {
     app.use(express.static("dist"));
+    app.get("*", (req, res) => res.sendFile(path.resolve("dist/index.html")));
   }
 
   app.listen(PORT, "0.0.0.0", () => {
