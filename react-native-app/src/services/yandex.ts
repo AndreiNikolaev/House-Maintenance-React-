@@ -38,12 +38,17 @@ export const yandexApi = {
 
       const responseText = await response.text();
       console.log(`[DEBUG] YandexSearch.searchV2 response status: ${response.status}`);
+      
       if (!response.ok) {
         console.error(`[DEBUG] YandexSearch.searchV2 error body: ${responseText}`);
         try {
           const err = JSON.parse(responseText);
           throw new Error(err.error || `Search failed: ${response.status}`);
         } catch {
+          // If we got HTML, it's likely a redirect or 404 falling through to Vite
+          if (responseText.includes('<!doctype html>')) {
+            throw new Error(`Server returned HTML instead of JSON. This usually means the API route was not found or you were redirected to login. URL: ${url}`);
+          }
           throw new Error(`Search failed (${response.status}): ${responseText.slice(0, 200)}`);
         }
       }
@@ -53,7 +58,7 @@ export const yandexApi = {
         results = JSON.parse(responseText);
       } catch (e) {
         console.error(`[ERROR] YandexSearch: Failed to parse JSON. Response starts with: ${responseText.slice(0, 200)}`);
-        throw new Error(`Invalid JSON response from server: ${responseText.slice(0, 100)}`);
+        throw new Error(`Invalid JSON response from server. Expected JSON but received: ${responseText.slice(0, 50)}...`);
       }
       console.log(`[RESPONSE] YandexSearch.searchV2: found ${results.length} results`);
       return results;
