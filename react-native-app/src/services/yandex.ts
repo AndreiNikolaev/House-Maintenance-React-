@@ -16,15 +16,19 @@ export const yandexApi = {
   },
 
   async searchV2(query: string, settings: AppSettings): Promise<{ title: string; url: string }[]> {
-    console.log(`[REQUEST] YandexSearch.searchV2: ${query}`);
+    const url = `${CONFIG.API_BASE_URL}/api/yandex/search`;
+    console.log(`[REQUEST] YandexSearch.searchV2: ${query} to ${url}`);
     
     if (!settings.yandexSearchApiKey || !settings.yandexFolderId) 
       throw new Error('Search API Key or Folder ID missing in settings');
 
     try {
-      const response = await fetch(`${CONFIG.API_BASE_URL}/api/yandex/search`, {
+      const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify({
           query,
           apiKey: settings.yandexSearchApiKey,

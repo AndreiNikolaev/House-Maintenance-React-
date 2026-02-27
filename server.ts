@@ -15,9 +15,20 @@ async function startServer() {
   }));
   app.use(express.json({ limit: '50mb' }));
 
+  // Normalization middleware for API routes
+  app.use('/api', (req, res, next) => {
+    if (req.path.length > 1 && req.path.endsWith('/')) {
+      const query = req.url.slice(req.path.length);
+      const safepath = req.path.slice(0, -1);
+      console.log(`[SERVER V5] Normalizing API path: ${req.path} -> ${safepath}`);
+      req.url = safepath + query;
+    }
+    next();
+  });
+
   // Request logging middleware
   app.use((req, res, next) => {
-    console.log(`[SERVER V3] ${new Date().toISOString()} ${req.method} ${req.url}`);
+    console.log(`[SERVER V5] ${new Date().toISOString()} ${req.method} ${req.url}`);
     next();
   });
 
@@ -26,8 +37,8 @@ async function startServer() {
   });
 
   // PDF Extraction API
-  app.post(["/api/pdf/extract", "/api/pdf/extract/"], async (req, res) => {
-    console.log(`[SERVER V4] Hit /api/pdf/extract`);
+  app.post("/api/pdf/extract", async (req, res) => {
+    console.log(`[SERVER V5] Hit /api/pdf/extract`);
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: "URL is required" });
 
@@ -64,8 +75,8 @@ async function startServer() {
   });
 
   // API Proxy for Yandex Search
-  app.post(["/api/yandex/search", "/api/yandex/search/"], async (req, res) => {
-    console.log(`[SERVER V4] Hit /api/yandex/search`);
+  app.post("/api/yandex/search", async (req, res) => {
+    console.log(`[SERVER V5] Hit /api/yandex/search`);
     const { query, apiKey, folderId } = req.body;
     if (!apiKey || !folderId) {
       return res.status(400).json({ error: "API Key and Folder ID are required" });
@@ -130,8 +141,8 @@ async function startServer() {
   });
 
   // API Proxy for YandexGPT
-  app.post(["/api/yandex/gpt", "/api/yandex/gpt/"], async (req, res) => {
-    console.log(`[SERVER V4] Hit /api/yandex/gpt`);
+  app.post("/api/yandex/gpt", async (req, res) => {
+    console.log(`[SERVER V5] Hit /api/yandex/gpt`);
     const { apiKey, folderId, body } = req.body;
     try {
       const response = await fetch('https://llm.api.cloud.yandex.net/foundationModels/v1/completion', {
@@ -172,7 +183,7 @@ async function startServer() {
 
   // API 404 Handler - Catch-all for any /api request that didn't match above
   app.all("/api*", (req, res) => {
-    console.log(`[SERVER V4] API 404: ${req.method} ${req.url}`);
+    console.log(`[SERVER V5] API 404: ${req.method} ${req.url}`);
     res.status(404).json({ 
       error: `API Route ${req.method} ${req.url} not found`,
       message: "If you are seeing HTML, the request might have been redirected or shadowed."

@@ -3,16 +3,18 @@ import { CONFIG } from '../config';
 
 export const pdfService = {
   async extractRelevantText(fileUri: string, onProgress?: (p: number) => void): Promise<{ text: string; rules: string[] }> {
-    console.log(`[REQUEST] PDFService.extractRelevantText: ${fileUri}`);
+    const url = `${CONFIG.API_BASE_URL}/api/pdf/extract`;
+    console.log(`[REQUEST] PDFService.extractRelevantText: ${fileUri} to ${url}`);
     
     try {
       if (onProgress) onProgress(10);
-      const url = `${CONFIG.API_BASE_URL}/api/pdf/extract`;
-      console.log(`[REQUEST] PDFService fetching from: ${url}`);
 
       const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify({ url: fileUri })
       });
 
