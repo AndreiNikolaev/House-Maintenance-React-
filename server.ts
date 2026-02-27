@@ -1,27 +1,62 @@
+import './polyfill';
 import express from "express";
 import cors from "cors";
 import { createServer as createViteServer } from "vite";
 import * as pdfjs from 'pdfjs-dist';
-import DOMMatrix from 'dommatrix';
-
-// Polyfill DOMMatrix for pdfjs-dist in Node.js
-(global as any).DOMMatrix = DOMMatrix;
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(cors());
+  app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-folder-id']
+  }));
   app.use(express.json({ limit: '50mb' }));
 
   // Request logging middleware
   app.use((req, res, next) => {
-    console.log(`[SERVER] ${req.method} ${req.url}`);
+    console.log(`[SERVER] ${new Date().toISOString()} ${req.method} ${req.url}`);
     next();
   });
 
   app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", time: new Date().toISOString() });
+    res.json({ status: "ok", time: new Date().toISOString(), env: process.env.NODE_ENV });
+  });
+
+  // PDF Extraction API (Lazy load pdfjs to avoid startup crashes)
+  app.post("/api/pdf/extract", async (req, res) => {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: "URL is required" });
+
+    try {
+      console.log(`[SERVER] Extracting PDF from: ${url}`);
+      const pdfjs = await import('pdfjs-dist');
+      
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Failed to fetch PDF: ${response.status}`);
+      const buffer = await response.arrayBuffer();
+
+      const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer) });
+      const pdf = await loadingTask.promise;
+      
+      let fullText = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items
+          .map((item: any) => item.str)
+          .join(' ');
+        fullText += `--- Page ${i} ---\n${pageText}\n\n`;
+      }
+
+      console.log(`[SERVER] Successfully extracted ${pdf.numPages} pages`);
+      res.json({ text: fullText });
+    } catch (err: any) {
+      console.error("[SERVER ERROR] PDF Extraction:", err.message);
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // API Proxy for Yandex Search
@@ -158,4 +193,14 @@ async function startServer() {
   });
 }
 
-startServer();
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+});
+
+startServer().catch(err => {
+  console.error("Failed to start server:", err);
+});

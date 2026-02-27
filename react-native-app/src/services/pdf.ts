@@ -16,13 +16,18 @@ export const pdfService = {
         body: JSON.stringify({ url: fileUri })
       });
 
+      const responseText = await response.text();
       if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || 'PDF extraction failed');
+        try {
+          const err = JSON.parse(responseText);
+          throw new Error(err.error || 'PDF extraction failed');
+        } catch {
+          throw new Error(`PDF extraction failed (${response.status}): ${responseText.slice(0, 100)}`);
+        }
       }
 
       if (onProgress) onProgress(90);
-      const data = await response.json();
+      const data = JSON.parse(responseText);
       
       if (onProgress) onProgress(100);
 

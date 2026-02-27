@@ -32,12 +32,17 @@ export const yandexApi = {
         })
       });
 
+      const responseText = await response.text();
       if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || 'Search failed');
+        try {
+          const err = JSON.parse(responseText);
+          throw new Error(err.error || 'Search failed');
+        } catch {
+          throw new Error(`Search failed (${response.status}): ${responseText.slice(0, 100)}`);
+        }
       }
 
-      const results = await response.json();
+      const results = JSON.parse(responseText);
       console.log(`[RESPONSE] YandexSearch.searchV2: found ${results.length} results`);
       return results;
     } catch (err: any) {
@@ -72,7 +77,12 @@ export const yandexApi = {
         })
       });
 
-      const data = await response.json();
+      const responseText = await response.text();
+      if (!response.ok) {
+        throw new Error(`GPT API failed (${response.status}): ${responseText.slice(0, 100)}`);
+      }
+
+      const data = JSON.parse(responseText);
       const resultText = data.result.alternatives[0].message.text;
       const jsonStr = resultText.replace(/```json|```/g, '').trim();
       const parsed = JSON.parse(jsonStr);
@@ -111,7 +121,12 @@ export const yandexApi = {
         })
       });
 
-      const data = await response.json();
+      const responseText = await response.text();
+      if (!response.ok) {
+        throw new Error(`GPT Merge failed (${response.status}): ${responseText.slice(0, 100)}`);
+      }
+
+      const data = JSON.parse(responseText);
       const resultText = data.result.alternatives[0].message.text;
       const jsonStr = resultText.replace(/```json|```/g, '').trim();
       const parsed = JSON.parse(jsonStr);
