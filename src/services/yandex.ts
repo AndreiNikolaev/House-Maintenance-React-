@@ -5,19 +5,38 @@ export const yandexApi = {
   async searchV2(query: string, settings: AppSettings): Promise<{ title: string; url: string }[]> {
     logger.add('request', 'YandexSearch', 'searchV2', { query });
     
-    if (!settings.yandexSearchApiKey) {
-      throw new Error('Search API Key missing');
+    if (!settings.yandexSearchApiKey || !settings.yandexFolderId) {
+      throw new Error('Search API Key or Folder ID missing');
     }
 
     try {
       const response = await fetch('/api/yandex/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, apiKey: settings.yandexSearchApiKey })
+        body: JSON.stringify({ 
+          query, 
+          apiKey: settings.yandexSearchApiKey,
+          folderId: settings.yandexFolderId
+        })
       });
       
-      if (!response.ok) throw new Error(`Search failed: ${response.status}`);
-      const results = await response.json();
+      const responseText = await response.text();
+      if (!response.ok) {
+        try {
+          const err = JSON.parse(responseText);
+          throw new Error(err.error || `Search failed: ${response.status}`);
+        } catch {
+          throw new Error(`Search failed (${response.status}): ${responseText.slice(0, 200)}`);
+        }
+      }
+
+      let results;
+      try {
+        results = JSON.parse(responseText);
+      } catch (e) {
+        console.error(`[ERROR] YandexSearch: Failed to parse JSON. Response starts with: ${responseText.slice(0, 200)}`);
+        throw new Error(`Invalid JSON response from server: ${responseText.slice(0, 100)}`);
+      }
 
       logger.add('response', 'YandexSearch', 'searchV2', { results });
       return results;

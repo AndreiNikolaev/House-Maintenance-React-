@@ -33,10 +33,12 @@ export const yandexApi = {
       });
 
       const responseText = await response.text();
+      console.log(`[DEBUG] YandexSearch.searchV2 response status: ${response.status}`);
       if (!response.ok) {
+        console.error(`[DEBUG] YandexSearch.searchV2 error body: ${responseText}`);
         try {
           const err = JSON.parse(responseText);
-          throw new Error(err.error || 'Search failed');
+          throw new Error(err.error || `Search failed: ${response.status}`);
         } catch {
           throw new Error(`Search failed (${response.status}): ${responseText.slice(0, 200)}`);
         }
