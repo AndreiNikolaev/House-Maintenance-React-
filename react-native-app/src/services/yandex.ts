@@ -5,7 +5,7 @@ export const yandexApi = {
   async checkConnection(): Promise<boolean> {
     try {
       const url = `${CONFIG.API_BASE_URL}/api/health`;
-      console.log(`[CONNECTIVITY] Checking connection to: ${url}`);
+      console.log(`[CONNECTIVITY ${CONFIG.VERSION}] Checking connection to: ${url}`);
       const response = await fetch(url, { credentials: 'include' });
       const data = await response.json();
       console.log(`[CONNECTIVITY] Success:`, data);
@@ -18,7 +18,7 @@ export const yandexApi = {
 
   async searchV2(query: string, settings: AppSettings): Promise<{ title: string; url: string }[]> {
     const url = `${CONFIG.API_BASE_URL}/api/yandex/search`;
-    console.log(`[REQUEST] YandexSearch.searchV2: ${query} to ${url}`);
+    console.log(`[REQUEST ${CONFIG.VERSION}] YandexSearch.searchV2: ${query} to ${url}`);
     
     if (!settings.yandexSearchApiKey || !settings.yandexFolderId) 
       throw new Error('Search API Key or Folder ID missing in settings');

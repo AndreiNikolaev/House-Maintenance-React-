@@ -4,7 +4,7 @@ import { CONFIG } from '../config';
 export const pdfService = {
   async extractRelevantText(fileUri: string, onProgress?: (p: number) => void): Promise<{ text: string; rules: string[] }> {
     const url = `${CONFIG.API_BASE_URL}/api/pdf/extract`;
-    console.log(`[REQUEST] PDFService.extractRelevantText: ${fileUri} to ${url}`);
+    console.log(`[REQUEST ${CONFIG.VERSION}] PDFService.extractRelevantText: ${fileUri} to ${url}`);
     
     try {
       if (onProgress) onProgress(10);
