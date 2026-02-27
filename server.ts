@@ -18,7 +18,7 @@ async function startServer() {
     }
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-folder-id, Accept');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-folder-id, Accept, x-client-version');
     
     if (req.method === 'OPTIONS') {
       return res.sendStatus(200);
@@ -31,19 +31,20 @@ async function startServer() {
   // Request logging middleware
   app.use((req, res, next) => {
     if (req.url.startsWith('/api')) {
-      console.log(`[SERVER V7] ${new Date().toISOString()} ${req.method} ${req.url}`);
+      const clientVersion = req.headers['x-client-version'] || 'unknown';
+      console.log(`[SERVER V8] ${new Date().toISOString()} ${req.method} ${req.url} (Client: ${clientVersion})`);
     }
     next();
   });
 
   // Health check
   app.get(["/api/health", "/api/health/"], (req, res) => {
-    res.json({ status: "ok", version: "V7", time: new Date().toISOString() });
+    res.json({ status: "ok", version: "V8", time: new Date().toISOString() });
   });
 
   // PDF Extraction API
   app.post("/api/pdf/extract", async (req, res) => {
-    console.log(`[SERVER V7] Hit /api/pdf/extract`);
+    console.log(`[SERVER V8] Hit /api/pdf/extract`);
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: "URL is required" });
 
@@ -74,7 +75,7 @@ async function startServer() {
 
   // API Proxy for Yandex Search
   app.post("/api/yandex/search", async (req, res) => {
-    console.log(`[SERVER V7] Hit /api/yandex/search`);
+    console.log(`[SERVER V8] Hit /api/yandex/search`);
     const { query, apiKey, folderId } = req.body;
     if (!apiKey || !folderId) return res.status(400).json({ error: "Keys required" });
 
@@ -113,7 +114,7 @@ async function startServer() {
 
   // API Proxy for YandexGPT
   app.post("/api/yandex/gpt", async (req, res) => {
-    console.log(`[SERVER V7] Hit /api/yandex/gpt`);
+    console.log(`[SERVER V8] Hit /api/yandex/gpt`);
     const { apiKey, folderId, body } = req.body;
     try {
       const response = await fetch('https://llm.api.cloud.yandex.net/foundationModels/v1/completion', {
@@ -134,7 +135,7 @@ async function startServer() {
 
   // API 404 Handler
   app.all("/api*", (req, res) => {
-    console.log(`[SERVER V7] API 404: ${req.method} ${req.url}`);
+    console.log(`[SERVER V8] API 404: ${req.method} ${req.url}`);
     res.status(404).json({ error: `API Route not found: ${req.url}` });
   });
 

@@ -5,8 +5,11 @@ export const yandexApi = {
   async checkConnection(): Promise<boolean> {
     try {
       const url = `${CONFIG.API_BASE_URL}/api/health`;
-      console.log(`[CONNECTIVITY ${CONFIG.VERSION}] Checking connection to: ${url}`);
-      const response = await fetch(url, { credentials: 'include' });
+      console.log(`[CONNECTIVITY ${CONFIG.VERSION}] Checking connection to: ${url || '(relative)'}`);
+      const response = await fetch(url, { 
+        credentials: 'include',
+        headers: { 'x-client-version': CONFIG.VERSION }
+      });
       const data = await response.json();
       console.log(`[CONNECTIVITY] Success:`, data);
       return response.ok;
@@ -18,7 +21,7 @@ export const yandexApi = {
 
   async searchV2(query: string, settings: AppSettings): Promise<{ title: string; url: string }[]> {
     const url = `${CONFIG.API_BASE_URL}/api/yandex/search`;
-    console.log(`[REQUEST ${CONFIG.VERSION}] YandexSearch.searchV2: ${query} to ${url}`);
+    console.log(`[REQUEST ${CONFIG.VERSION}] YandexSearch.searchV2: ${query} to ${url || '(relative)'}`);
     
     if (!settings.yandexSearchApiKey || !settings.yandexFolderId) 
       throw new Error('Search API Key or Folder ID missing in settings');
@@ -28,7 +31,8 @@ export const yandexApi = {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'x-client-version': CONFIG.VERSION
         },
         credentials: 'include',
         body: JSON.stringify({

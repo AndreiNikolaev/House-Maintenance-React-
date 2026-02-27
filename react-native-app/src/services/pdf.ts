@@ -4,7 +4,7 @@ import { CONFIG } from '../config';
 export const pdfService = {
   async extractRelevantText(fileUri: string, onProgress?: (p: number) => void): Promise<{ text: string; rules: string[] }> {
     const url = `${CONFIG.API_BASE_URL}/api/pdf/extract`;
-    console.log(`[REQUEST ${CONFIG.VERSION}] PDFService.extractRelevantText: ${fileUri} to ${url}`);
+    console.log(`[REQUEST ${CONFIG.VERSION}] PDFService.extractRelevantText: ${fileUri} to ${url || '(relative)'}`);
     
     try {
       if (onProgress) onProgress(10);
@@ -13,7 +13,8 @@ export const pdfService = {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'x-client-version': CONFIG.VERSION
         },
         credentials: 'include',
         body: JSON.stringify({ url: fileUri })
