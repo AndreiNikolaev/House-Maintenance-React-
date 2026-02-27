@@ -8,43 +8,36 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Custom CORS middleware to handle credentials correctly
-  app.use((req, res, next) => {
-    const origin = req.headers.origin;
-    if (origin) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-    } else {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-    }
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-folder-id, Accept, x-client-version');
-    
-    if (req.method === 'OPTIONS') {
-      return res.sendStatus(200);
-    }
-    next();
-  });
+  // Standard CORS with credentials support
+  app.use(cors({
+    origin: (origin, callback) => {
+      // Allow all origins to support the dynamic AI Studio preview URLs
+      callback(null, true);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-folder-id', 'Accept', 'x-client-version']
+  }));
 
   app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ extended: true }));
 
-  // Request logging middleware
+  // Super Logger - Log EVERY request to /api at the very beginning
   app.use((req, res, next) => {
-    if (req.url.startsWith('/api')) {
-      const clientVersion = req.headers['x-client-version'] || 'unknown';
-      console.log(`[SERVER V8] ${new Date().toISOString()} ${req.method} ${req.url} (Client: ${clientVersion})`);
+    if (req.url.includes('/api')) {
+      console.log(`[V9 MONITOR] ${req.method} ${req.url} | Origin: ${req.headers.origin} | Cookie: ${req.headers.cookie ? 'Present' : 'Missing'}`);
     }
     next();
   });
 
   // Health check
-  app.get(["/api/health", "/api/health/"], (req, res) => {
-    res.json({ status: "ok", version: "V8", time: new Date().toISOString() });
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", version: "V9", time: new Date().toISOString() });
   });
 
   // PDF Extraction API
   app.post("/api/pdf/extract", async (req, res) => {
-    console.log(`[SERVER V8] Hit /api/pdf/extract`);
+    console.log(`[V9 API] Hit /api/pdf/extract`);
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: "URL is required" });
 
@@ -75,7 +68,7 @@ async function startServer() {
 
   // API Proxy for Yandex Search
   app.post("/api/yandex/search", async (req, res) => {
-    console.log(`[SERVER V8] Hit /api/yandex/search`);
+    console.log(`[V9 API] Hit /api/yandex/search`);
     const { query, apiKey, folderId } = req.body;
     if (!apiKey || !folderId) return res.status(400).json({ error: "Keys required" });
 
@@ -114,7 +107,7 @@ async function startServer() {
 
   // API Proxy for YandexGPT
   app.post("/api/yandex/gpt", async (req, res) => {
-    console.log(`[SERVER V8] Hit /api/yandex/gpt`);
+    console.log(`[V9 API] Hit /api/yandex/gpt`);
     const { apiKey, folderId, body } = req.body;
     try {
       const response = await fetch('https://llm.api.cloud.yandex.net/foundationModels/v1/completion', {
@@ -135,7 +128,7 @@ async function startServer() {
 
   // API 404 Handler
   app.all("/api*", (req, res) => {
-    console.log(`[SERVER V8] API 404: ${req.method} ${req.url}`);
+    console.log(`[V9 API] 404: ${req.method} ${req.url}`);
     res.status(404).json({ error: `API Route not found: ${req.url}` });
   });
 
