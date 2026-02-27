@@ -22,12 +22,19 @@ export const pdfService = {
           const err = JSON.parse(responseText);
           throw new Error(err.error || 'PDF extraction failed');
         } catch {
-          throw new Error(`PDF extraction failed (${response.status}): ${responseText.slice(0, 100)}`);
+          throw new Error(`PDF extraction failed (${response.status}): ${responseText.slice(0, 200)}`);
         }
       }
 
       if (onProgress) onProgress(90);
-      const data = JSON.parse(responseText);
+      
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        console.error(`[ERROR] PDFService: Failed to parse JSON. Response starts with: ${responseText.slice(0, 200)}`);
+        throw new Error(`Invalid JSON response from server: ${responseText.slice(0, 100)}`);
+      }
       
       if (onProgress) onProgress(100);
 

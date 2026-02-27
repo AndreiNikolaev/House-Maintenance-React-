@@ -38,11 +38,17 @@ export const yandexApi = {
           const err = JSON.parse(responseText);
           throw new Error(err.error || 'Search failed');
         } catch {
-          throw new Error(`Search failed (${response.status}): ${responseText.slice(0, 100)}`);
+          throw new Error(`Search failed (${response.status}): ${responseText.slice(0, 200)}`);
         }
       }
 
-      const results = JSON.parse(responseText);
+      let results;
+      try {
+        results = JSON.parse(responseText);
+      } catch (e) {
+        console.error(`[ERROR] YandexSearch: Failed to parse JSON. Response starts with: ${responseText.slice(0, 200)}`);
+        throw new Error(`Invalid JSON response from server: ${responseText.slice(0, 100)}`);
+      }
       console.log(`[RESPONSE] YandexSearch.searchV2: found ${results.length} results`);
       return results;
     } catch (err: any) {
@@ -79,10 +85,16 @@ export const yandexApi = {
 
       const responseText = await response.text();
       if (!response.ok) {
-        throw new Error(`GPT API failed (${response.status}): ${responseText.slice(0, 100)}`);
+        throw new Error(`GPT API failed (${response.status}): ${responseText.slice(0, 200)}`);
       }
 
-      const data = JSON.parse(responseText);
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        console.error(`[ERROR] YandexGPT: Failed to parse JSON. Response starts with: ${responseText.slice(0, 200)}`);
+        throw new Error(`Invalid JSON response from server: ${responseText.slice(0, 100)}`);
+      }
       const resultText = data.result.alternatives[0].message.text;
       const jsonStr = resultText.replace(/```json|```/g, '').trim();
       const parsed = JSON.parse(jsonStr);
@@ -123,10 +135,16 @@ export const yandexApi = {
 
       const responseText = await response.text();
       if (!response.ok) {
-        throw new Error(`GPT Merge failed (${response.status}): ${responseText.slice(0, 100)}`);
+        throw new Error(`GPT Merge failed (${response.status}): ${responseText.slice(0, 200)}`);
       }
 
-      const data = JSON.parse(responseText);
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        console.error(`[ERROR] YandexGPT Merge: Failed to parse JSON. Response starts with: ${responseText.slice(0, 200)}`);
+        throw new Error(`Invalid JSON response from server: ${responseText.slice(0, 100)}`);
+      }
       const resultText = data.result.alternatives[0].message.text;
       const jsonStr = resultText.replace(/```json|```/g, '').trim();
       const parsed = JSON.parse(jsonStr);

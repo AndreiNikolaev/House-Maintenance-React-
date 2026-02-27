@@ -25,20 +25,23 @@ async function startServer() {
     res.json({ status: "ok", time: new Date().toISOString(), env: process.env.NODE_ENV });
   });
 
-  // PDF Extraction API (Lazy load pdfjs to avoid startup crashes)
+  // PDF Extraction API
   app.post("/api/pdf/extract", async (req, res) => {
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: "URL is required" });
 
     try {
       console.log(`[SERVER] Extracting PDF from: ${url}`);
-      const pdfjs = await import('pdfjs-dist');
       
       const response = await fetch(url);
       if (!response.ok) throw new Error(`Failed to fetch PDF: ${response.status}`);
       const buffer = await response.arrayBuffer();
 
-      const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer) });
+      const loadingTask = pdfjs.getDocument({ 
+        data: new Uint8Array(buffer),
+        useSystemFonts: true,
+        disableFontFace: true
+      });
       const pdf = await loadingTask.promise;
       
       let fullText = '';
@@ -147,34 +150,9 @@ async function startServer() {
     }
   });
 
-  // PDF Extraction API
-  app.post("/api/pdf/extract", async (req, res) => {
-    const { url } = req.body;
-    if (!url) return res.status(400).json({ error: "URL is required" });
-
-    try {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`Failed to fetch PDF: ${response.status}`);
-      const buffer = await response.arrayBuffer();
-
-      const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer) });
-      const pdf = await loadingTask.promise;
-      
-      let fullText = '';
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const pageText = textContent.items
-          .map((item: any) => item.str)
-          .join(' ');
-        fullText += `--- Page ${i} ---\n${pageText}\n\n`;
-      }
-
-      res.json({ text: fullText });
-    } catch (err: any) {
-      console.error("[SERVER ERROR] PDF Extraction:", err.message);
-      res.status(500).json({ error: err.message });
-    }
+  // API 404 Handler
+  app.all("/api/*", (req, res) => {
+    res.status(404).json({ error: `API Route ${req.method} ${req.url} not found` });
   });
 
   // Vite middleware for development
