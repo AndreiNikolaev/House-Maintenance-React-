@@ -4,8 +4,9 @@ import { CONFIG } from '../config';
 export const yandexApi = {
   async checkConnection(): Promise<boolean> {
     try {
-      console.log(`[CONNECTIVITY] Checking connection to: ${CONFIG.API_BASE_URL}/api/health`);
-      const response = await fetch(`${CONFIG.API_BASE_URL}/api/health`);
+      const url = `${CONFIG.API_BASE_URL}/api/health`;
+      console.log(`[CONNECTIVITY] Checking connection to: ${url}`);
+      const response = await fetch(url, { credentials: 'include' });
       const data = await response.json();
       console.log(`[CONNECTIVITY] Success:`, data);
       return response.ok;
@@ -29,6 +30,7 @@ export const yandexApi = {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
+        credentials: 'include',
         body: JSON.stringify({
           query,
           apiKey: settings.yandexSearchApiKey,
@@ -77,6 +79,7 @@ export const yandexApi = {
         headers: {
           'Content-Type': 'application/json'
         },
+        credentials: 'include',
         body: JSON.stringify({
           apiKey: settings.yandexApiKey,
           folderId: settings.yandexFolderId,
@@ -127,6 +130,7 @@ export const yandexApi = {
         headers: {
           'Content-Type': 'application/json'
         },
+        credentials: 'include',
         body: JSON.stringify({
           apiKey: settings.yandexApiKey,
           folderId: settings.yandexFolderId,

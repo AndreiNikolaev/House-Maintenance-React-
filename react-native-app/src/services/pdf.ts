@@ -15,6 +15,7 @@ export const pdfService = {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
+        credentials: 'include',
         body: JSON.stringify({ url: fileUri })
       });
 
