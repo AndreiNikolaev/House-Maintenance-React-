@@ -17,16 +17,18 @@ async function startServer() {
 
   // Request logging middleware
   app.use((req, res, next) => {
-    console.log(`[SERVER] ${new Date().toISOString()} ${req.method} ${req.url}`);
+    console.log(`[DEBUG SERVER] ${new Date().toISOString()} ${req.method} ${req.url}`);
+    console.log(`[DEBUG SERVER] Headers: ${JSON.stringify(req.headers)}`);
     next();
   });
 
-  app.get("/api/health", (req, res) => {
+  app.get(["/api/health", "/api/health/"], (req, res) => {
     res.json({ status: "ok", time: new Date().toISOString(), env: process.env.NODE_ENV });
   });
 
   // PDF Extraction API
-  app.post("/api/pdf/extract", async (req, res) => {
+  app.post(["/api/pdf/extract", "/api/pdf/extract/"], async (req, res) => {
+    console.log(`[DEBUG SERVER] Hit /api/pdf/extract`);
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: "URL is required" });
 
@@ -63,17 +65,28 @@ async function startServer() {
   });
 
   // API Proxy for Yandex Search
-  app.post("/api/yandex/search", async (req, res) => {
+  app.post(["/api/yandex/search", "/api/yandex/search/"], async (req, res) => {
+    console.log(`[DEBUG SERVER] Hit /api/yandex/search`);
     const { query, apiKey, folderId } = req.body;
     if (!apiKey || !folderId) return res.status(400).json({ error: "API Key and Folder ID are required" });
 
     try {
-      const url = `https://searchapi.cloud.yandex.net/v1/search?folderid=${folderId}&query=${encodeURIComponent(query + " инструкция по эксплуатации filetype:pdf")}`;
+      const url = `https://searchapi.api.cloud.yandex.net/v2/web/search`;
       
       const response = await fetch(url, {
+        method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           'Authorization': `Api-Key ${apiKey}`
-        }
+        },
+        body: JSON.stringify({
+          query: {
+            searchType: "SEARCH_TYPE_RU",
+            queryText: `${query} инструкция по эксплуатации filetype:pdf`
+          },
+          folderId,
+          responseFormat: "FORMAT_XML"
+        })
       });
 
       if (!response.ok) {
@@ -81,7 +94,9 @@ async function startServer() {
         throw new Error(`Search API error: ${response.status} ${errText}`);
       }
 
-      const xmlText = await response.text();
+      const data = await response.json();
+      // Yandex Cloud API returns bytes as base64 in JSON
+      const xmlText = Buffer.from(data.rawData, 'base64').toString('utf8');
       
       const results: { title: string; url: string }[] = [];
       const docRegex = /<doc[^>]*>([\s\S]*?)<\/doc>/g;
@@ -111,7 +126,8 @@ async function startServer() {
   });
 
   // API Proxy for YandexGPT
-  app.post("/api/yandex/gpt", async (req, res) => {
+  app.post(["/api/yandex/gpt", "/api/yandex/gpt/"], async (req, res) => {
+    console.log(`[DEBUG SERVER] Hit /api/yandex/gpt`);
     const { apiKey, folderId, body } = req.body;
     try {
       const response = await fetch('https://llm.api.cloud.yandex.net/foundationModels/v1/completion', {
