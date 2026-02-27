@@ -3,16 +3,20 @@ import { logger } from './logger';
 
 export const yandexApi = {
   async searchV2(query: string, settings: AppSettings): Promise<{ title: string; url: string }[]> {
-    logger.add('request', 'YandexSearch', 'searchV2', { query });
+    const url = '/api/yandex/search';
+    logger.add('request', 'YandexSearch', 'searchV2', { query, to: url });
     
     if (!settings.yandexSearchApiKey || !settings.yandexFolderId) {
       throw new Error('Search API Key or Folder ID missing');
     }
 
     try {
-      const response = await fetch('/api/yandex/search', {
+      const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify({ 
           query, 
           apiKey: settings.yandexSearchApiKey,
@@ -21,7 +25,10 @@ export const yandexApi = {
       });
       
       const responseText = await response.text();
+      console.log(`[DEBUG] YandexSearch.searchV2 response status: ${response.status}`);
+      
       if (!response.ok) {
+        console.error(`[DEBUG] YandexSearch.searchV2 error body: ${responseText}`);
         try {
           const err = JSON.parse(responseText);
           throw new Error(err.error || `Search failed: ${response.status}`);
