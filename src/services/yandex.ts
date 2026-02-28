@@ -1,47 +1,29 @@
 import { AppSettings, Equipment } from '../types';
-import { CONFIG } from '../config';
+import { logger } from './logger';
 
 export const yandexApi = {
-  async checkConnection(): Promise<boolean> {
-    try {
-      const url = `${CONFIG.API_BASE_URL}/api/health`;
-      console.log(`[CONNECTIVITY ${CONFIG.VERSION}] Checking connection to: ${url || '(relative)'}`);
-      const response = await fetch(url, { 
-        credentials: 'include',
-        headers: { 'x-client-version': CONFIG.VERSION }
-      });
-      const data = await response.json();
-      console.log(`[CONNECTIVITY] Success:`, data);
-      return response.ok;
-    } catch (err: any) {
-      console.error(`[CONNECTIVITY] Failed:`, err.message);
-      return false;
-    }
-  },
-
   async searchV2(query: string, settings: AppSettings): Promise<{ title: string; url: string }[]> {
-    const url = `${CONFIG.API_BASE_URL}/api/yandex/search`;
-    console.log(`[REQUEST ${CONFIG.VERSION}] YandexSearch.searchV2: ${query} to ${url || '(relative)'}`);
+    const url = '/api/yandex/search';
+    logger.add('request', 'YandexSearch', 'searchV2', { query, to: url });
     
-    if (!settings.yandexSearchApiKey || !settings.yandexFolderId) 
-      throw new Error('Search API Key or Folder ID missing in settings');
+    if (!settings.yandexSearchApiKey || !settings.yandexFolderId) {
+      throw new Error('Search API Key or Folder ID missing');
+    }
 
     try {
       const response = await fetch(url, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'x-client-version': CONFIG.VERSION
+          'Accept': 'application/json'
         },
-        credentials: 'include',
-        body: JSON.stringify({
-          query,
+        body: JSON.stringify({ 
+          query, 
           apiKey: settings.yandexSearchApiKey,
           folderId: settings.yandexFolderId
         })
       });
-
+      
       const responseText = await response.text();
       console.log(`[DEBUG] YandexSearch.searchV2 response status: ${response.status}`);
       
@@ -51,10 +33,6 @@ export const yandexApi = {
           const err = JSON.parse(responseText);
           throw new Error(err.error || `Search failed: ${response.status}`);
         } catch {
-          // If we got HTML, it's likely a redirect or 404 falling through to Vite
-          if (responseText.includes('<!doctype html>')) {
-            throw new Error(`Server returned HTML instead of JSON. This usually means the API route was not found or you were redirected to login. URL: ${url}`);
-          }
           throw new Error(`Search failed (${response.status}): ${responseText.slice(0, 200)}`);
         }
       }
@@ -64,26 +42,24 @@ export const yandexApi = {
         results = JSON.parse(responseText);
       } catch (e) {
         console.error(`[ERROR] YandexSearch: Failed to parse JSON. Response starts with: ${responseText.slice(0, 200)}`);
-        throw new Error(`Invalid JSON response from server. Expected JSON but received: ${responseText.slice(0, 50)}...`);
+        throw new Error(`Invalid JSON response from server: ${responseText.slice(0, 100)}`);
       }
-      console.log(`[RESPONSE] YandexSearch.searchV2: found ${results.length} results`);
+
+      logger.add('response', 'YandexSearch', 'searchV2', { results });
       return results;
     } catch (err: any) {
-      console.error(`[ERROR] YandexSearch.searchV2:`, err.message);
+      logger.add('error', 'YandexSearch', 'searchV2', { error: err.message });
       throw err;
     }
   },
 
   async processChunk(text: string, settings: AppSettings): Promise<any[]> {
-    console.log(`[REQUEST] YandexGPT.processChunk: textLength=${text.length}`);
+    logger.add('request', 'YandexGPT', 'processChunk', { textLength: text.length });
 
     try {
-      const response = await fetch(`${CONFIG.API_BASE_URL}/api/yandex/gpt`, {
+      const response = await fetch('/api/yandex/gpt', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           apiKey: settings.yandexApiKey,
           folderId: settings.yandexFolderId,
@@ -101,40 +77,27 @@ export const yandexApi = {
         })
       });
 
-      const responseText = await response.text();
-      if (!response.ok) {
-        throw new Error(`GPT API failed (${response.status}): ${responseText.slice(0, 200)}`);
-      }
-
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (e) {
-        console.error(`[ERROR] YandexGPT: Failed to parse JSON. Response starts with: ${responseText.slice(0, 200)}`);
-        throw new Error(`Invalid JSON response from server: ${responseText.slice(0, 100)}`);
-      }
+      if (!response.ok) throw new Error(`GPT failed: ${response.status}`);
+      const data = await response.json();
       const resultText = data.result.alternatives[0].message.text;
       const jsonStr = resultText.replace(/```json|```/g, '').trim();
       const parsed = JSON.parse(jsonStr);
       
-      console.log(`[RESPONSE] YandexGPT.processChunk: foundTasks=${parsed.length}`);
+      logger.add('response', 'YandexGPT', 'processChunk', { foundTasks: parsed.length });
       return Array.isArray(parsed) ? parsed : [];
     } catch (err: any) {
-      console.error(`[ERROR] YandexGPT.processChunk:`, err.message);
+      logger.add('error', 'YandexGPT', 'processChunk', { error: err.message });
       return [];
     }
   },
 
   async mergeResults(tasks: any[], rules: string[], settings: AppSettings): Promise<Partial<Equipment>> {
-    console.log(`[REQUEST] YandexGPT.mergeResults: tasksCount=${tasks.length}`);
+    logger.add('request', 'YandexGPT', 'mergeResults', { tasksCount: tasks.length });
 
     try {
-      const response = await fetch(`${CONFIG.API_BASE_URL}/api/yandex/gpt`, {
+      const response = await fetch('/api/yandex/gpt', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           apiKey: settings.yandexApiKey,
           folderId: settings.yandexFolderId,
@@ -152,26 +115,16 @@ export const yandexApi = {
         })
       });
 
-      const responseText = await response.text();
-      if (!response.ok) {
-        throw new Error(`GPT Merge failed (${response.status}): ${responseText.slice(0, 200)}`);
-      }
-
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (e) {
-        console.error(`[ERROR] YandexGPT Merge: Failed to parse JSON. Response starts with: ${responseText.slice(0, 200)}`);
-        throw new Error(`Invalid JSON response from server: ${responseText.slice(0, 100)}`);
-      }
+      if (!response.ok) throw new Error(`GPT failed: ${response.status}`);
+      const data = await response.json();
       const resultText = data.result.alternatives[0].message.text;
       const jsonStr = resultText.replace(/```json|```/g, '').trim();
       const parsed = JSON.parse(jsonStr);
       
-      console.log(`[RESPONSE] YandexGPT.mergeResults: finalTasks=${parsed.maintenance_schedule?.length}`);
+      logger.add('response', 'YandexGPT', 'mergeResults', { finalTasks: parsed.maintenance_schedule?.length });
       return parsed;
     } catch (err: any) {
-      console.error(`[ERROR] YandexGPT.mergeResults:`, err.message);
+      logger.add('error', 'YandexGPT', 'mergeResults', { error: err.message });
       throw err;
     }
   }

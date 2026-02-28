@@ -1,5 +1,5 @@
 {
-  "name": "Yandex Connect",
-  "description": "Mobile-first bridge to Yandex Cloud services with real-time API traffic monitoring and logging.",
+  "name": "Service Assistant",
+  "description": "AI-powered maintenance manager for home and industrial equipment",
   "requestFramePermissions": []
 }

@@ -9,16 +9,17 @@ export const maintenanceLogic = {
     if (lower.includes('месяц') || lower.includes('мес')) return { value: num, unit: 'month' };
     if (lower.includes('год') || lower.includes('лет')) return { value: num, unit: 'year' };
     
+    // Default to year if not specified but mentioned "раз в..."
     if (lower.includes('раз в')) return { value: 1, unit: 'year' };
     
     return null;
   },
 
   getNextDate: (lastDate: string | null, periodicity: string): Date => {
-    const start = lastDate ? parseISO(lastDate) : new Date(2000, 0, 1);
+    const start = lastDate ? parseISO(lastDate) : new Date(2000, 0, 1); // If never done, it's overdue
     const parsed = maintenanceLogic.parsePeriodicity(periodicity);
     
-    if (!parsed) return addYears(start, 1);
+    if (!parsed) return addYears(start, 1); // Fallback
 
     switch (parsed.unit) {
       case 'day': return addDays(start, parsed.value);
