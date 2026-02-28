@@ -670,6 +670,10 @@ function SettingsView({ settings, onSave }: { settings: AppSettings, onSave: (s:
     }
   };
 
+  const openInBrowser = () => {
+    window.open(API_ENDPOINTS.INIT_SESSION, '_blank');
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0, scale: 0.95 }}
@@ -718,6 +722,13 @@ function SettingsView({ settings, onSave }: { settings: AppSettings, onSave: (s:
             className="w-full py-3 bg-stone-100 text-stone-900 rounded-xl text-xs font-bold active:scale-95 transition-all disabled:opacity-50"
           >
             {testStatus === 'testing' ? 'Проверка...' : 'Проверить соединение'}
+          </button>
+
+          <button 
+            onClick={openInBrowser}
+            className="w-full py-3 bg-stone-100 text-stone-900 rounded-xl text-xs font-bold active:scale-95 transition-all"
+          >
+            Авторизовать устройство (браузер)
           </button>
 
           <button 

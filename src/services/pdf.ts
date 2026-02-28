@@ -1,4 +1,5 @@
 import * as pdfjs from 'pdfjs-dist';
+import { CapacitorHttp, Capacitor } from '@capacitor/core';
 import { logger } from './logger';
 import { API_ENDPOINTS } from '../config';
 import { apiRequest } from './api';
@@ -62,6 +63,37 @@ export const pdfService = {
   async extractFromUrl(url: string, onProgress?: (p: number) => void): Promise<{ text: string; rules: string[] }> {
     logger.add('request', 'PDFService', 'extractFromUrl', { url });
     
+    const isNative = Capacitor.isNativePlatform();
+    
+    if (isNative) {
+      try {
+        if (onProgress) onProgress(10);
+        console.log('[PDF] Native direct download:', url);
+        const response = await CapacitorHttp.get({ 
+          url, 
+          responseType: 'blob' 
+        });
+        
+        let blob: Blob;
+        if (typeof response.data === 'string') {
+          const byteCharacters = atob(response.data);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          blob = new Blob([byteArray], { type: 'application/pdf' });
+        } else {
+          blob = response.data;
+        }
+
+        const file = new File([blob], 'manual.pdf', { type: 'application/pdf' });
+        return this.extractRelevantText(file, onProgress);
+      } catch (err: any) {
+        console.error('[PDF] Native download failed, trying proxy...', err);
+      }
+    }
+
     try {
       if (onProgress) onProgress(10);
       
