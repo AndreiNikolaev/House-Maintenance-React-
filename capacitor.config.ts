@@ -1,8 +1,9 @@
+
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.maintenance.app',
-  appName: 'Maintenance Assistant',
+  appId: 'com.yandex.connect',
+  appName: 'Yandex Connect',
   webDir: 'dist',
   server: {
     androidScheme: 'https'
