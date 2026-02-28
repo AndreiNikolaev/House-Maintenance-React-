@@ -1,6 +1,7 @@
 import * as pdfjs from 'pdfjs-dist';
 import { logger } from './logger';
 import { API_ENDPOINTS } from '../config';
+import { apiRequest } from './api';
 
 // Use Vite's asset import for the worker
 // @ts-ignore
@@ -59,11 +60,24 @@ export const pdfService = {
   },
 
   async extractFromUrl(url: string, onProgress?: (p: number) => void): Promise<{ text: string; rules: string[] }> {
-    // Using our local proxy for CORS bypass
-    const proxyUrl = `${API_ENDPOINTS.PROXY}?url=${encodeURIComponent(url)}`;
-    const response = await fetch(proxyUrl);
-    if (!response.ok) throw new Error('Не удалось загрузить файл по ссылке');
-    const blob = await response.blob();
-    return this.extractRelevantText(blob, onProgress);
+    logger.add('request', 'PDFService', 'extractFromUrl', { url });
+    
+    try {
+      if (onProgress) onProgress(10);
+      
+      const data = await apiRequest({
+        url: API_ENDPOINTS.PDF_EXTRACT,
+        method: 'POST',
+        body: { url }
+      });
+      
+      if (onProgress) onProgress(100);
+      
+      logger.add('response', 'PDFService', 'extractFromUrl', { length: data.text?.length });
+      return { text: data.text, rules: [] };
+    } catch (err: any) {
+      logger.add('error', 'PDFService', 'extractFromUrl', { error: err.message });
+      throw new Error(err.message);
+    }
   }
 };

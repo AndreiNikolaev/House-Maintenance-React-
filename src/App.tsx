@@ -636,8 +636,27 @@ function AddEquipmentView({ settings, onAdd, onCancel }: { settings: AppSettings
   );
 }
 
+import { API_ENDPOINTS } from './config';
+import { apiRequest } from './services/api';
+
 function SettingsView({ settings, onSave }: { settings: AppSettings, onSave: (s: AppSettings) => void }) {
   const [localSettings, setLocalSettings] = useState(settings);
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
+
+  const testConnection = async () => {
+    setTestStatus('testing');
+    try {
+      const data = await apiRequest({
+        url: API_ENDPOINTS.HEALTH,
+        method: 'GET'
+      });
+      setTestStatus('ok');
+      alert(`Успешно! Сервер доступен. Версия: ${data.version || 'неизвестна'}`);
+    } catch (err: any) {
+      setTestStatus('error');
+      alert(`Ошибка соединения: ${err.message}`);
+    }
+  };
 
   return (
     <motion.div 
@@ -680,12 +699,22 @@ function SettingsView({ settings, onSave }: { settings: AppSettings, onSave: (s:
           </div>
         </div>
 
-        <button 
-          onClick={() => onSave(localSettings)}
-          className="w-full py-4 bg-stone-900 text-white rounded-2xl font-bold active:scale-95 transition-all"
-        >
-          Сохранить настройки
-        </button>
+        <div className="space-y-3">
+          <button 
+            onClick={testConnection}
+            disabled={testStatus === 'testing'}
+            className="w-full py-3 bg-stone-100 text-stone-900 rounded-xl text-xs font-bold active:scale-95 transition-all disabled:opacity-50"
+          >
+            {testStatus === 'testing' ? 'Проверка...' : 'Проверить соединение'}
+          </button>
+
+          <button 
+            onClick={() => onSave(localSettings)}
+            className="w-full py-4 bg-stone-900 text-white rounded-2xl font-bold active:scale-95 transition-all shadow-lg shadow-stone-200"
+          >
+            Сохранить настройки
+          </button>
+        </div>
       </div>
       
       <div className="p-4 text-center">
