@@ -7,10 +7,12 @@ export async function apiRequest(options: {
   body?: any;
 }) {
   const platform = Capacitor.getPlatform();
-  console.log(`[API] Platform: ${platform}, Method: ${options.method}, URL: ${options.url}`);
+  const isNative = Capacitor.isNativePlatform();
+  console.log(`[API] Platform: ${platform}, isNative: ${isNative}, Method: ${options.method}, URL: ${options.url}`);
   
   // В Capacitor на Android/iOS используем нативный HTTP для обхода CORS
-  if (platform === 'android' || platform === 'ios') {
+  // Мы проверяем и платформу, и флаг isNative для максимальной надежности
+  if (isNative || platform === 'android' || platform === 'ios') {
     try {
       console.log(`[API Native] Attempting native request...`);
       const response = await CapacitorHttp.request({

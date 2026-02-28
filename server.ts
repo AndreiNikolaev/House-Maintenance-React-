@@ -11,6 +11,8 @@ async function startServer() {
   // Ручной обработчик CORS для максимальной надежности в Capacitor
   app.use((req, res, next) => {
     const origin = req.headers.origin;
+    console.log(`[SERVER V6] CORS Request: ${req.method} ${req.url} from ${origin || 'no-origin'}`);
+    
     if (origin) {
       res.setHeader('Access-Control-Allow-Origin', origin);
     } else {
@@ -22,6 +24,7 @@ async function startServer() {
 
     // Мгновенный ответ на OPTIONS без перенаправлений
     if (req.method === 'OPTIONS') {
+      console.log(`[SERVER V6] Responding 200 to OPTIONS`);
       return res.sendStatus(200);
     }
     next();
