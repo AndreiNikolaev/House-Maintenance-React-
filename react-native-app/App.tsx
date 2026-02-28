@@ -1,4 +1,3 @@
-import { registerRootComponent } from 'expo';
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   StyleSheet, 
@@ -1032,5 +1031,3 @@ const styles = StyleSheet.create({
     backgroundColor: '#1c1917',
   },
 });
-
-registerRootComponent(App);
