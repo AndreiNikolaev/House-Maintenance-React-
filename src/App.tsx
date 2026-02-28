@@ -43,6 +43,18 @@ export default function App() {
 
   useEffect(() => {
     setEquipment(storage.getEquipment());
+    
+    // Warmup session for Capacitor
+    const warmup = async () => {
+      try {
+        console.log('[APP] Initializing session...');
+        await apiRequest({ url: API_ENDPOINTS.INIT_SESSION, method: 'GET' });
+        console.log('[APP] Session initialized');
+      } catch (e) {
+        console.error('[APP] Session initialization failed', e);
+      }
+    };
+    warmup();
   }, []);
 
   const saveEquipment = (newEquipment: Equipment[]) => {

@@ -10,30 +10,65 @@ export async function apiRequest(options: {
   const isNative = Capacitor.isNativePlatform();
   console.log(`[API] Platform: ${platform}, isNative: ${isNative}, Method: ${options.method}, URL: ${options.url}`);
   
-  // В Capacitor на Android/iOS используем нативный HTTP для обхода CORS
-  // Мы проверяем и платформу, и флаг isNative для максимальной надежности
+  const headers = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json, text/plain, */*',
+    'X-Requested-With': 'XMLHttpRequest',
+    'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36',
+    ...options.headers,
+  };
+
   if (isNative || platform === 'android' || platform === 'ios') {
     try {
-      console.log(`[API Native] Attempting native request...`);
+      console.log(`[API Native] Requesting...`);
       const response = await CapacitorHttp.request({
         url: options.url,
         method: options.method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          ...options.headers,
-        },
+        headers,
         data: options.body,
+        connectTimeout: 10000,
+        readTimeout: 10000,
       });
       
-      console.log(`[API Native] Success. Status: ${response.status}`);
+      console.log(`[API Native] Status: ${response.status}, Type: ${response.headers['content-type'] || response.headers['Content-Type']}`);
       
       let data = response.data;
+      
+      // Проверка на перехват инфраструктурой (Cookie Check / Login Page)
+      const contentType = (response.headers['content-type'] || response.headers['Content-Type'] || '').toLowerCase();
+      if (contentType.includes('text/html') && typeof data === 'string' && data.includes('<html')) {
+        console.warn(`[API Native] Detected HTML response (infrastructure challenge).`);
+        console.log(`[API Native] HTML Preview: ${data.substring(0, 200)}`);
+        
+        // Если мы получили страницу проверки кук, попробуем "прогреть" сессию
+        if (data.includes('Cookie check') || data.includes('__cookie_check')) {
+          console.log(`[API Native] Attempting session warmup...`);
+          await CapacitorHttp.get({ url: options.url.split('/api')[0] + '/' });
+          // Повторяем запрос один раз
+          console.log(`[API Native] Retrying original request after warmup...`);
+          const retryResponse = await CapacitorHttp.request({
+            url: options.url,
+            method: options.method,
+            headers,
+            data: options.body,
+          });
+          data = retryResponse.data;
+          if (retryResponse.status >= 200 && retryResponse.status < 300 && !(typeof data === 'string' && data.includes('<html'))) {
+             // Success on retry
+             if (typeof data === 'string') {
+               try { data = JSON.parse(data); } catch (e) {}
+             }
+             return data;
+          }
+        }
+        throw new Error('Сервер вернул HTML вместо данных. Возможно, требуется авторизация в браузере или сессия истекла.');
+      }
+
       if (typeof data === 'string') {
         try {
           data = JSON.parse(data);
         } catch (e) {
-          // Not JSON, keep as string
+          // Not JSON
         }
       }
 
@@ -44,30 +79,22 @@ export async function apiRequest(options: {
       
       return data;
     } catch (err: any) {
-      console.error(`[API Native Error] Critical:`, err);
-      // Если нативный запрос упал, пробуем fetch как последний шанс
-      console.log(`[API Native] Falling back to fetch...`);
+      console.error(`[API Native Error]`, err);
+      throw err;
     }
+  } else {
+    // Web fallback
+    const response = await fetch(options.url, {
+      method: options.method,
+      headers,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+    
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`API Error (${response.status}): ${text}`);
+    }
+    
+    return await response.json();
   }
-
-  // Web fallback (или если нативный запрос не удался)
-  console.log(`[API Web] Using standard fetch...`);
-  const response = await fetch(options.url, {
-    method: options.method,
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      ...options.headers,
-    },
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
-  
-  console.log(`[API Web] Status: ${response.status}`);
-  
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`API Error (${response.status}): ${text}`);
-  }
-  
-  return await response.json();
 }

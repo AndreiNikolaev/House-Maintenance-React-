@@ -6,4 +6,5 @@ export const API_ENDPOINTS = {
   PROXY: `${API_BASE_URL}/api/proxy`,
   PDF_EXTRACT: `${API_BASE_URL}/api/pdf/extract`,
   HEALTH: `${API_BASE_URL}/api/health`,
+  INIT_SESSION: `${API_BASE_URL}/api/init-session`,
 };

@@ -21,6 +21,7 @@ async function startServer() {
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-folder-id, Accept');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('X-App-Server', 'V6');
 
     // Мгновенный ответ на OPTIONS без перенаправлений
     if (req.method === 'OPTIONS') {
@@ -34,6 +35,10 @@ async function startServer() {
 
   // API Router
   const apiRouter = express.Router();
+
+  apiRouter.get("/init-session", (req, res) => {
+    res.json({ status: "ok", message: "Session initialized" });
+  });
 
   // Normalization middleware for API routes
   apiRouter.use((req, res, next) => {
