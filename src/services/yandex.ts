@@ -1,9 +1,10 @@
 import { AppSettings, Equipment } from '../types';
 import { logger } from './logger';
+import { API_ENDPOINTS } from '../config';
 
 export const yandexApi = {
   async searchV2(query: string, settings: AppSettings): Promise<{ title: string; url: string }[]> {
-    const url = '/api/yandex/search';
+    const url = API_ENDPOINTS.SEARCH;
     logger.add('request', 'YandexSearch', 'searchV2', { query, to: url });
     
     if (!settings.yandexSearchApiKey || !settings.yandexFolderId) {
@@ -57,7 +58,7 @@ export const yandexApi = {
     logger.add('request', 'YandexGPT', 'processChunk', { textLength: text.length });
 
     try {
-      const response = await fetch('/api/yandex/gpt', {
+      const response = await fetch(API_ENDPOINTS.GPT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -95,7 +96,7 @@ export const yandexApi = {
     logger.add('request', 'YandexGPT', 'mergeResults', { tasksCount: tasks.length });
 
     try {
-      const response = await fetch('/api/yandex/gpt', {
+      const response = await fetch(API_ENDPOINTS.GPT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
