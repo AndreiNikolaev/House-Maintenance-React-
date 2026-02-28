@@ -8,76 +8,72 @@ export async function apiRequest(options: {
 }) {
   const platform = Capacitor.getPlatform();
   const isNative = Capacitor.isNativePlatform();
+  const baseUrl = options.url.split('/api')[0];
+  
   console.log(`[API] Platform: ${platform}, isNative: ${isNative}, Method: ${options.method}, URL: ${options.url}`);
   
-  const headers = {
+  const getHeaders = () => ({
     'Content-Type': 'application/json',
-    'Accept': 'application/json, text/plain, */*',
+    'Accept': 'application/json, text/html, application/xhtml+xml, */*',
     'X-Requested-With': 'XMLHttpRequest',
-    'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36',
+    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+    'Referer': baseUrl + '/',
+    'Origin': baseUrl,
     ...options.headers,
-  };
+  });
 
   if (isNative || platform === 'android' || platform === 'ios') {
     try {
-      console.log(`[API Native] Requesting...`);
-      const response = await CapacitorHttp.request({
-        url: options.url,
-        method: options.method,
-        headers,
-        data: options.body,
-        connectTimeout: 10000,
-        readTimeout: 10000,
-      });
-      
-      console.log(`[API Native] Status: ${response.status}, Type: ${response.headers['content-type'] || response.headers['Content-Type']}`);
-      
-      let data = response.data;
-      
-      // Проверка на перехват инфраструктурой (Cookie Check / Login Page)
-      const contentType = (response.headers['content-type'] || response.headers['Content-Type'] || '').toLowerCase();
-      if (contentType.includes('text/html') && typeof data === 'string' && data.includes('<html')) {
-        console.warn(`[API Native] Detected HTML response (infrastructure challenge).`);
-        console.log(`[API Native] HTML Preview: ${data.substring(0, 200)}`);
+      const performRequest = async (isRetry = false): Promise<any> => {
+        console.log(`[API Native] ${isRetry ? 'Retrying' : 'Requesting'}...`);
+        const response = await CapacitorHttp.request({
+          url: options.url,
+          method: options.method,
+          headers: getHeaders(),
+          data: options.body,
+          connectTimeout: 15000,
+          readTimeout: 15000,
+        });
+
+        const contentType = (response.headers['content-type'] || response.headers['Content-Type'] || '').toLowerCase();
+        const isHtml = contentType.includes('text/html');
+        const isOurServer = response.headers['x-app-server'] === 'V6' || response.headers['X-App-Server'] === 'V6';
         
-        // Если мы получили страницу проверки кук, попробуем "прогреть" сессию
-        if (data.includes('Cookie check') || data.includes('__cookie_check')) {
-          console.log(`[API Native] Attempting session warmup...`);
-          await CapacitorHttp.get({ url: options.url.split('/api')[0] + '/' });
-          // Повторяем запрос один раз
-          console.log(`[API Native] Retrying original request after warmup...`);
-          const retryResponse = await CapacitorHttp.request({
-            url: options.url,
-            method: options.method,
-            headers,
-            data: options.body,
-          });
-          data = retryResponse.data;
-          if (retryResponse.status >= 200 && retryResponse.status < 300 && !(typeof data === 'string' && data.includes('<html'))) {
-             // Success on retry
-             if (typeof data === 'string') {
-               try { data = JSON.parse(data); } catch (e) {}
-             }
-             return data;
+        // Если это HTML и НЕ наш сервер — это проверка кук
+        if (isHtml && !isOurServer && !isRetry) {
+          console.warn(`[API Native] Infrastructure challenge detected. Starting aggressive warmup...`);
+          
+          // 1. Загружаем корень
+          await CapacitorHttp.get({ url: baseUrl + '/', headers: getHeaders() });
+          
+          // 2. Загружаем страницу инициализации сессии
+          await CapacitorHttp.get({ url: baseUrl + '/api/init-session', headers: getHeaders() });
+          
+          // 3. Небольшая пауза для записи кук в нативный стор
+          await new Promise(r => setTimeout(r, 500));
+          
+          // 4. Повторяем основной запрос
+          return performRequest(true);
+        }
+
+        let data = response.data;
+        if (typeof data === 'string' && (isHtml || !isOurServer)) {
+          if (data.includes('Cookie check') || data.includes('__cookie_check')) {
+            if (!isRetry) return performRequest(true);
+            throw new Error('Не удалось пройти проверку Cookie инфраструктуры. Попробуйте открыть URL приложения в браузере устройства.');
           }
+          try { data = JSON.parse(data); } catch (e) { /* keep as string */ }
         }
-        throw new Error('Сервер вернул HTML вместо данных. Возможно, требуется авторизация в браузере или сессия истекла.');
-      }
 
-      if (typeof data === 'string') {
-        try {
-          data = JSON.parse(data);
-        } catch (e) {
-          // Not JSON
+        if (response.status < 200 || response.status >= 300) {
+          const errorMsg = typeof data === 'string' ? data : JSON.stringify(data);
+          throw new Error(`API Error (${response.status}): ${errorMsg}`);
         }
-      }
+        
+        return data;
+      };
 
-      if (response.status < 200 || response.status >= 300) {
-        const errorMsg = typeof data === 'string' ? data : JSON.stringify(data);
-        throw new Error(`API Error (${response.status}): ${errorMsg}`);
-      }
-      
-      return data;
+      return await performRequest();
     } catch (err: any) {
       console.error(`[API Native Error]`, err);
       throw err;
@@ -86,7 +82,7 @@ export async function apiRequest(options: {
     // Web fallback
     const response = await fetch(options.url, {
       method: options.method,
-      headers,
+      headers: getHeaders(),
       body: options.body ? JSON.stringify(options.body) : undefined,
     });
     
