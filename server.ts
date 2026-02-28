@@ -8,13 +8,25 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(cors({
-    origin: true, // Отражаем origin запроса (разрешаем всё, что пришло)
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-folder-id', 'Accept'],
-    optionsSuccessStatus: 200 // Гарантируем 200 для OPTIONS
-  }));
+  // Ручной обработчик CORS для максимальной надежности в Capacitor
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    } else {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-folder-id, Accept');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+    // Мгновенный ответ на OPTIONS без перенаправлений
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(200);
+    }
+    next();
+  });
+
   app.use(express.json({ limit: '50mb' }));
 
   // API Router
