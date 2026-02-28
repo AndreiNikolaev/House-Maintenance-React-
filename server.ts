@@ -9,18 +9,11 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(cors({
-    origin: (origin, callback) => {
-      // Разрешаем запросы без origin (например, мобильные приложения или curl)
-      // или запросы с localhost (Capacitor)
-      if (!origin || origin.includes('localhost') || origin.includes('capacitor://') || origin.includes('run.app')) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
+    origin: true, // Отражаем origin запроса (разрешаем всё, что пришло)
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-folder-id', 'Accept']
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-folder-id', 'Accept'],
+    optionsSuccessStatus: 200 // Гарантируем 200 для OPTIONS
   }));
   app.use(express.json({ limit: '50mb' }));
 
