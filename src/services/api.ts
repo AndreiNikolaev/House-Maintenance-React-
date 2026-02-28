@@ -28,12 +28,21 @@ export async function apiRequest(options: {
       
       console.log(`[API Native] Success. Status: ${response.status}`);
       
+      let data = response.data;
+      if (typeof data === 'string') {
+        try {
+          data = JSON.parse(data);
+        } catch (e) {
+          // Not JSON, keep as string
+        }
+      }
+
       if (response.status < 200 || response.status >= 300) {
-        const errorMsg = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+        const errorMsg = typeof data === 'string' ? data : JSON.stringify(data);
         throw new Error(`API Error (${response.status}): ${errorMsg}`);
       }
       
-      return response.data;
+      return data;
     } catch (err: any) {
       console.error(`[API Native Error] Critical:`, err);
       // Если нативный запрос упал, пробуем fetch как последний шанс

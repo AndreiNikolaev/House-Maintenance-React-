@@ -24,7 +24,7 @@ export const yandexApi = {
       });
       
       logger.add('response', 'YandexSearch', 'searchV2', { results });
-      return results;
+      return Array.isArray(results) ? results : [];
     } catch (err: any) {
       logger.add('error', 'YandexSearch', 'searchV2', { error: err.message });
       throw err;
@@ -95,8 +95,15 @@ export const yandexApi = {
       const jsonStr = resultText.replace(/```json|```/g, '').trim();
       const parsed = JSON.parse(jsonStr);
       
-      logger.add('response', 'YandexGPT', 'mergeResults', { finalTasks: parsed.maintenance_schedule?.length });
-      return parsed;
+      const result = {
+        name: parsed.name || '',
+        type: parsed.type || '',
+        maintenance_schedule: Array.isArray(parsed.maintenance_schedule) ? parsed.maintenance_schedule : [],
+        important_rules: Array.isArray(parsed.important_rules) ? parsed.important_rules : []
+      };
+      
+      logger.add('response', 'YandexGPT', 'mergeResults', { finalTasks: result.maintenance_schedule.length });
+      return result;
     } catch (err: any) {
       logger.add('error', 'YandexGPT', 'mergeResults', { error: err.message });
       throw err;

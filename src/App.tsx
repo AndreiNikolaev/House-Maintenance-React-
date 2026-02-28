@@ -487,7 +487,7 @@ function AddEquipmentView({ settings, onAdd, onCancel }: { settings: AppSettings
               </div>
             </div>
 
-            {searchResults.length > 0 && (
+            {Array.isArray(searchResults) && searchResults.length > 0 && (
               <div className="space-y-2">
                 <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400 ml-1">Результаты поиска</label>
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
