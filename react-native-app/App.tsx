@@ -517,8 +517,28 @@ function AddEquipmentView({ settings, onAdd, onCancel }: { settings: AppSettings
   );
 }
 
+import { API_ENDPOINTS } from './src/config';
+
 function SettingsView({ settings, onSave }: { settings: AppSettings, onSave: (s: AppSettings) => void }) {
   const [local, setLocal] = useState(settings);
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
+
+  const testConnection = async () => {
+    setTestStatus('testing');
+    try {
+      const response = await fetch(API_ENDPOINTS.HEALTH);
+      if (response.ok) {
+        const data = await response.json();
+        setTestStatus('ok');
+        Alert.alert('Успешно', `Сервер доступен. Версия: ${data.version || 'неизвестна'}`);
+      } else {
+        throw new Error(`Статус: ${response.status}`);
+      }
+    } catch (err: any) {
+      setTestStatus('error');
+      Alert.alert('Ошибка соединения', `Не удалось связаться с сервером: ${err.message}`);
+    }
+  };
 
   return (
     <View style={styles.card}>
@@ -552,6 +572,16 @@ function SettingsView({ settings, onSave }: { settings: AppSettings, onSave: (s:
           onChangeText={(v) => setLocal({...local, yandexSearchApiKey: v})}
         />
       </View>
+
+      <TouchableOpacity 
+        onPress={testConnection}
+        disabled={testStatus === 'testing'}
+        style={[styles.secondaryButton, { marginBottom: 10 }]}
+      >
+        <Text style={styles.secondaryButtonText}>
+          {testStatus === 'testing' ? 'Проверка...' : 'Проверить соединение'}
+        </Text>
+      </TouchableOpacity>
 
       <TouchableOpacity 
         onPress={() => onSave(local)}
@@ -952,6 +982,19 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  secondaryButton: {
+    backgroundColor: '#f5f5f4',
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e7e5e4',
+  },
+  secondaryButtonText: {
+    color: '#1c1917',
+    fontWeight: 'bold',
+    fontSize: 14,
   },
   buttonDisabled: {
     opacity: 0.5,
