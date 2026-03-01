@@ -9,21 +9,26 @@ const YANDEX_ENDPOINTS = {
   GPT: 'https://llm.api.cloud.yandex.net/foundationModels/v1/completion'
 };
 
-function parseYandexJson(data: any): { title: string; url: string }[] {
+function parseYandexResponse(data: any): { title: string; url: string }[] {
   const results: { title: string; url: string }[] = [];
   try {
-    // Парсинг формата Yandex Search API v2 (JSON)
-    const items = data?.results?.items || [];
-    for (const item of items) {
-      if (item.url) {
-        results.push({
-          title: item.title || 'Без названия',
-          url: item.url
-        });
-      }
+    // 1. Проверка на формат JSON (Yandex Cloud API v2)
+    if (data?.results?.items) {
+      return data.results.items.map((item: any) => ({
+        title: item.title || 'Без названия',
+        url: item.url
+      })).filter((i: any) => i.url);
     }
+    
+    // 2. Проверка на массив (уже распарсенный прокси-сервером)
+    if (Array.isArray(data)) {
+      return data;
+    }
+
+    // 3. Если пришла строка (возможно XML), но мы в нативном режиме ожидаем JSON
+    console.warn('[Yandex Parser] Unexpected data format:', typeof data);
   } catch (e) {
-    console.error('Error parsing Yandex JSON', e);
+    console.error('[Yandex Parser] Error:', e);
   }
   return results;
 }
@@ -35,6 +40,7 @@ export const yandexApi = {
     if (isNative) {
       logger.add('request', 'YandexSearch', 'searchV2_native', { query });
       try {
+        console.log('[Yandex Search] Sending direct POST request to v2 API');
         const response = await CapacitorHttp.post({
           url: YANDEX_ENDPOINTS.SEARCH,
           headers: {
@@ -44,17 +50,22 @@ export const yandexApi = {
           data: {
             folderId: settings.yandexFolderId,
             query: query + ' инструкция по обслуживанию pdf',
-            lr: 225, // Россия
+            lr: 225,
             l10n: 'ru'
           }
         });
         
-        const results = parseYandexJson(response.data);
+        if (response.status !== 200) {
+          console.error(`[Yandex Search] API Error ${response.status}:`, response.data);
+          throw new Error(`Yandex API Error ${response.status}`);
+        }
+
+        const results = parseYandexResponse(response.data);
         logger.add('response', 'YandexSearch', 'searchV2_native', { count: results.length });
         return results;
       } catch (err: any) {
         logger.add('error', 'YandexSearch', 'searchV2_native', { error: err.message });
-        // Если прямой запрос не удался, пробуем прокси
+        console.warn('[Yandex Search] Direct call failed, falling back to proxy...', err.message);
       }
     }
 

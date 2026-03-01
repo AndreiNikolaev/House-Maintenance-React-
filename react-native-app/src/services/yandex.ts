@@ -6,20 +6,18 @@ const YANDEX_ENDPOINTS = {
   GPT: 'https://llm.api.cloud.yandex.net/foundationModels/v1/completion'
 };
 
-function parseYandexJson(data: any): { title: string; url: string }[] {
+function parseYandexResponse(data: any): { title: string; url: string }[] {
   const results: { title: string; url: string }[] = [];
   try {
-    const items = data?.results?.items || [];
-    for (const item of items) {
-      if (item.url) {
-        results.push({
-          title: item.title || 'Без названия',
-          url: item.url
-        });
-      }
+    if (data?.results?.items) {
+      return data.results.items.map((item: any) => ({
+        title: item.title || 'Без названия',
+        url: item.url
+      })).filter((i: any) => i.url);
     }
+    if (Array.isArray(data)) return data;
   } catch (e) {
-    console.error('Error parsing Yandex JSON', e);
+    console.error('[Yandex Parser] Error:', e);
   }
   return results;
 }
@@ -31,7 +29,7 @@ export const yandexApi = {
     }
 
     try {
-      // Прямой вызов Yandex Search API v2
+      console.log('[Yandex Search] Direct POST to v2');
       const response = await fetch(YANDEX_ENDPOINTS.SEARCH, {
         method: 'POST',
         headers: { 
@@ -41,29 +39,30 @@ export const yandexApi = {
         body: JSON.stringify({ 
           folderId: settings.yandexFolderId,
           query: query + ' инструкция по обслуживанию pdf',
-          lr: 225, // Россия
+          lr: 225,
           l10n: 'ru'
         })
       });
       
-      if (!response.ok) {
-        // Fallback to proxy if direct fails (e.g. network issues or specific proxy needs)
-        console.warn('Direct Yandex Search failed, trying proxy...');
-        const proxyResponse = await fetch(API_ENDPOINTS.SEARCH, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            query, 
-            apiKey: settings.yandexSearchApiKey,
-            folderId: settings.yandexFolderId
-          })
-        });
-        if (!proxyResponse.ok) throw new Error(`Search failed: ${proxyResponse.status}`);
-        return await proxyResponse.json();
+      if (response.ok) {
+        const data = await response.json();
+        return parseYandexResponse(data);
       }
 
-      const data = await response.json();
-      return parseYandexJson(data);
+      console.warn('[Yandex Search] Direct failed, trying proxy...');
+      const proxyResponse = await fetch(API_ENDPOINTS.SEARCH, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          query, 
+          apiKey: settings.yandexSearchApiKey,
+          folderId: settings.yandexFolderId
+        })
+      });
+      
+      if (!proxyResponse.ok) throw new Error(`Search failed: ${proxyResponse.status}`);
+      const proxyData = await proxyResponse.json();
+      return parseYandexResponse(proxyData);
     } catch (err: any) {
       console.error('YandexSearch Error:', err);
       throw err;
