@@ -20,7 +20,7 @@
     "react-native-screens": "~3.29.0",
     "expo-document-picker": "~11.10.1",
     "expo-file-system": "~16.0.6",
-    "expo-screen-capture": "~5.0.1"
+    "expo-screen-capture": "^5.0.0"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
