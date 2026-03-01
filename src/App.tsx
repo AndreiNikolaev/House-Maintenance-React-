@@ -598,8 +598,19 @@ function AddEquipmentView({ settings, onAdd, onCancel }: { settings: AppSettings
         </div>
 
         {error && (
-          <div className="p-3 bg-red-50 text-red-600 text-xs rounded-xl border border-red-100">
-            {error}
+          <div className="p-4 bg-red-50 text-red-600 text-xs rounded-2xl border border-red-100 space-y-3">
+            <div className="flex items-start gap-2">
+              <AlertCircle size={16} className="shrink-0 mt-0.5" />
+              <p className="leading-relaxed">{error}</p>
+            </div>
+            {error.includes('Cookie Check') && (
+              <button 
+                onClick={() => window.open(API_ENDPOINTS.INIT_SESSION, '_blank')}
+                className="w-full py-2 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-colors"
+              >
+                Авторизовать в браузере
+              </button>
+            )}
           </div>
         )}
 

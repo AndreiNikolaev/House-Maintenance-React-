@@ -38,9 +38,11 @@ export const yandexApi = {
         },
         body: JSON.stringify({ 
           folderId: settings.yandexFolderId,
-          query: query + ' инструкция по обслуживанию pdf',
-          lr: 225,
-          l10n: 'ru'
+          query: {
+            searchType: "SEARCH_TYPE_RU",
+            queryText: query + ' инструкция по обслуживанию pdf'
+          },
+          responseFormat: "FORMAT_JSON"
         })
       });
       

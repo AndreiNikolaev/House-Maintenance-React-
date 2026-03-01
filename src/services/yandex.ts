@@ -49,15 +49,18 @@ export const yandexApi = {
           },
           data: {
             folderId: settings.yandexFolderId,
-            query: query + ' инструкция по обслуживанию pdf',
-            lr: 225,
-            l10n: 'ru'
+            query: {
+              searchType: "SEARCH_TYPE_RU",
+              queryText: query + ' инструкция по обслуживанию pdf'
+            },
+            responseFormat: "FORMAT_JSON"
           }
         });
         
         if (response.status !== 200) {
-          console.error(`[Yandex Search] API Error ${response.status}:`, response.data);
-          throw new Error(`Yandex API Error ${response.status}`);
+          const errData = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+          console.error(`[Yandex Search] API Error ${response.status}:`, errData);
+          throw new Error(`Yandex API Error ${response.status}: ${errData}`);
         }
 
         const results = parseYandexResponse(response.data);
@@ -66,6 +69,7 @@ export const yandexApi = {
       } catch (err: any) {
         logger.add('error', 'YandexSearch', 'searchV2_native', { error: err.message });
         console.warn('[Yandex Search] Direct call failed, falling back to proxy...', err.message);
+        // If direct fails, we try the proxy (which might hit the Cookie Check)
       }
     }
 
