@@ -71,8 +71,16 @@ export const pdfService = {
         console.log('[PDF] Native direct download:', url);
         const response = await CapacitorHttp.get({ 
           url, 
-          responseType: 'blob' 
+          responseType: 'blob',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/pdf, application/octet-stream, */*'
+          }
         });
+        
+        if (response.status !== 200) {
+          throw new Error(`Download failed with status ${response.status}`);
+        }
         
         let blob: Blob;
         if (typeof response.data === 'string') {

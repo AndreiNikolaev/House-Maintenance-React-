@@ -5,32 +5,25 @@ import { apiRequest } from './api';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 
 const YANDEX_ENDPOINTS = {
-  SEARCH: 'https://searchapi.api.cloud.yandex.net/v2/web/searchAsync',
+  SEARCH: 'https://searchapi.api.cloud.yandex.net/v2/web/search',
   GPT: 'https://llm.api.cloud.yandex.net/foundationModels/v1/completion'
 };
 
-function parseYandexXml(xmlString: string): { title: string; url: string }[] {
+function parseYandexJson(data: any): { title: string; url: string }[] {
   const results: { title: string; url: string }[] = [];
   try {
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(xmlString, "text/xml");
-    const groupNodes = xmlDoc.getElementsByTagName("group");
-    
-    for (let i = 0; i < groupNodes.length; i++) {
-      const docNode = groupNodes[i].getElementsByTagName("doc")[0];
-      if (docNode) {
-        const url = docNode.getElementsByTagName("url")[0]?.textContent;
-        const titleNode = docNode.getElementsByTagName("title")[0];
-        // Очистка заголовка от XML тегов (hlword)
-        const title = titleNode?.textContent || 'Без названия';
-        
-        if (url) {
-          results.push({ title, url });
-        }
+    // Парсинг формата Yandex Search API v2 (JSON)
+    const items = data?.results?.items || [];
+    for (const item of items) {
+      if (item.url) {
+        results.push({
+          title: item.title || 'Без названия',
+          url: item.url
+        });
       }
     }
   } catch (e) {
-    console.error('Error parsing Yandex XML', e);
+    console.error('Error parsing Yandex JSON', e);
   }
   return results;
 }
@@ -41,16 +34,27 @@ export const yandexApi = {
     
     if (isNative) {
       logger.add('request', 'YandexSearch', 'searchV2_native', { query });
-      const url = `${YANDEX_ENDPOINTS.SEARCH}?folderid=${settings.yandexFolderId}&apikey=${settings.yandexSearchApiKey}&query=${encodeURIComponent(query + ' инструкция по обслуживанию pdf')}`;
-      
       try {
-        const response = await CapacitorHttp.get({ url });
-        const results = parseYandexXml(response.data);
+        const response = await CapacitorHttp.post({
+          url: YANDEX_ENDPOINTS.SEARCH,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Api-Key ${settings.yandexSearchApiKey}`
+          },
+          data: {
+            folderId: settings.yandexFolderId,
+            query: query + ' инструкция по обслуживанию pdf',
+            lr: 225, // Россия
+            l10n: 'ru'
+          }
+        });
+        
+        const results = parseYandexJson(response.data);
         logger.add('response', 'YandexSearch', 'searchV2_native', { count: results.length });
         return results;
       } catch (err: any) {
         logger.add('error', 'YandexSearch', 'searchV2_native', { error: err.message });
-        throw err;
+        // Если прямой запрос не удался, пробуем прокси
       }
     }
 
