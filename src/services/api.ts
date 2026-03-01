@@ -28,8 +28,8 @@ export async function apiRequest(options: {
       
       // Если мы получили HTML от нашего домена - это Cookie Check
       if (typeof data === 'string' && data.includes('<html') && (options.url.includes('ais-dev') || options.url.includes('ais-pre'))) {
-        console.error('[API Native] Cookie Check detected. Data:', data.substring(0, 100));
-        throw new Error('Infrastructure Error: Cookie Check blocked the request. Please open the app URL in your mobile browser once to authorize.');
+        console.error('[API Native] Cookie Check detected. This happens when the preview session is not authorized in the system WebView.');
+        throw new Error('Ошибка авторизации (Cookie Check). Пожалуйста, перейдите в Настройки и нажмите "Авторизовать устройство", чтобы разрешить доступ к серверу.');
       }
 
       if (typeof data === 'string') {

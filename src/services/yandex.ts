@@ -40,7 +40,7 @@ export const yandexApi = {
     if (isNative) {
       logger.add('request', 'YandexSearch', 'searchV2_native', { query });
       try {
-        console.log('[Yandex Search] Sending direct POST request to v2 API');
+        console.log('[Yandex Search] Attempting direct POST to v2 API...');
         const response = await CapacitorHttp.post({
           url: YANDEX_ENDPOINTS.SEARCH,
           headers: {
@@ -57,19 +57,20 @@ export const yandexApi = {
           }
         });
         
-        if (response.status !== 200) {
+        if (response.status === 200) {
+          const results = parseYandexResponse(response.data);
+          logger.add('response', 'YandexSearch', 'searchV2_native', { count: results.length });
+          console.log(`[Yandex Search] Direct call successful. Found ${results.length} results.`);
+          return results;
+        } else {
           const errData = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
-          console.error(`[Yandex Search] API Error ${response.status}:`, errData);
-          throw new Error(`Yandex API Error ${response.status}: ${errData}`);
+          console.error(`[Yandex Search] Direct API Error ${response.status}:`, errData);
+          throw new Error(`Yandex Direct API Error ${response.status}`);
         }
-
-        const results = parseYandexResponse(response.data);
-        logger.add('response', 'YandexSearch', 'searchV2_native', { count: results.length });
-        return results;
       } catch (err: any) {
         logger.add('error', 'YandexSearch', 'searchV2_native', { error: err.message });
-        console.warn('[Yandex Search] Direct call failed, falling back to proxy...', err.message);
-        // If direct fails, we try the proxy (which might hit the Cookie Check)
+        console.error('[Yandex Search] Direct call failed critically:', err.message);
+        // Fallback to proxy as last resort
       }
     }
 
